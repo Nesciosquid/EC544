@@ -50,7 +50,8 @@ public class SendDataDemoGuiHostApplication {
     private static final int HOST_PORT = 99;
     private JTextArea status;
     private long[] addresses = new long[3];
-    private static final Set<String> ACCEPTED_KEYS = new HashSet<String>(Arrays.asList(new String[]{"0014.4F01.0000.4372", "0014.4F01.0000.00AE", "0014.4F01.0000.7811", "0014.4F01.0000.3560", "0014.4F01.0000.35EC"}));
+    //private static final Set<String> ACCEPTED_KEYS = new HashSet<String>(Arrays.asList(new String[]{"0014.4F01.0000.4372", "0014.4F01.0000.00AE", "0014.4F01.0000.7811", "0014.4F01.0000.3560", "0014.4F01.0000.35EC"}));
+    private ArrayList<String> ACCEPTED_KEYS = new ArrayList<String>();
     private DataWindow[] plots = new DataWindow[3];
     private static final int SEND_INTERVAL = 60 * 1000;
     private ArrayList<Data> data_array = new ArrayList<Data>();
@@ -59,6 +60,7 @@ public class SendDataDemoGuiHostApplication {
     //private FileOutputStream outtwo = null;
     //private File file = null;
     private BufferedWriter dataOut = null;
+    private BufferedReader keysIn = null;
 
     private class Data {
 
@@ -259,8 +261,8 @@ public class SendDataDemoGuiHostApplication {
         RadiogramConnection rCon;
         Radiogram dg;
         //file = new File("Data.txt");
-        String dataName = (startTime.toString().replaceAll("[^a-zA-Z0-9]+", "") + " output.csv");
-        String dataName2 = "sample.csv";
+        String dataName = ("./logs/"+startTime.toString().replaceAll("[^a-zA-Z0-9]+", "") + " log.csv");
+        String dataName2 = "current_output.csv";
         //outtwo = new FileOutputStream(file);
         //outone = new ObjectOutputStream(outtwo);
         //create the average window
@@ -297,6 +299,16 @@ public class SendDataDemoGuiHostApplication {
                 // Read sensor sample received over the radio
                 rCon.receive(dg);
                 String node = dg.getAddress();
+                
+                String line = null;
+                keysIn = new BufferedReader(new FileReader("keys.txt"));
+                ACCEPTED_KEYS.clear();
+                
+                while ((line = keysIn.readLine()) != null){
+                    ACCEPTED_KEYS.add(line);
+                }
+                keysIn.close();
+                
                 if (ACCEPTED_KEYS.contains(node)) {
                     //DataWindow dw = findPlot(dg.getAddressAsLong());
                     long time = dg.readLong();      // read time of the reading
@@ -332,6 +344,9 @@ public class SendDataDemoGuiHostApplication {
                     }
 
                     averagewindow.addData(time, average);*/
+                }
+                else {
+                    System.out.println("Connection from " + node + "ignored, not on whitelist.");
                 }
                 generateOutput(data_array, dataName2);
 
