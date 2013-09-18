@@ -171,8 +171,6 @@ public class SendDataDemoGuiHostApplication {
 
         int csv_width = (moteIDs.size() + 1);
 
-        
-
         datapoints.add(header_row);
         
         String new_row;
@@ -286,7 +284,7 @@ public class SendDataDemoGuiHostApplication {
         //----------------------------------------------//
         // Main data collection loop
         //This part is worth attention
-        Hashtable<String, Data> Inf = new Hashtable<String, Data>();
+        //Hashtable<String, Data> Inf = new Hashtable<String, Data>();
 
         dataOut = new BufferedWriter(new FileWriter(dataName, true));
         dataOut.write("address,time,value");

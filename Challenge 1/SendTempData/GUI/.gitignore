@@ -1,1 +1,4 @@
 _site/
+logs/
+current_output.csv
+start_jekyll.bat
