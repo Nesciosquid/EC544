@@ -42,7 +42,7 @@ import javax.microedition.midlet.MIDletStateChangeException;
  * @author: Vipul Gupta
  * modified: Ron Goldman
  */
-public class SensorSampler extends MIDlet {
+public class Tempsensor extends MIDlet {
 
     private static final int HOST_PORT = 99;
     private static final int SAMPLE_PERIOD = 3 * 1000;  // in milliseconds
