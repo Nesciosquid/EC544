@@ -29,6 +29,13 @@ public class Datapacket {
             value = val;
             address = addr;
         }
+        
+        public Datapacket(String addr, Timestamp time, int val)
+        {
+            timestamp = time;
+            value = val;
+            address = addr;
+        }
 
         public String getAddress() {
             return address;

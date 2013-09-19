@@ -48,22 +48,24 @@ public class TempsensorHostApplication {
     private static final int HOST_PORT = 99;
     private static final int SEND_INTERVAL = 60 * 1000;
     private static final String OUTPUT_FILE = "current_output.csv";
-    private static final String KEY_FILE = "keys.txt";
     
+    private static final String INPUT_LOG = "log_input.csv";
+    private static final String OUTPUT_LOG = "log_processed.csv";
+    
+    private static final String KEY_FILE = "keys.txt";
     private java.util.Date startDate = new java.util.Date();
     private Timestamp startTime = new Timestamp(startDate.getTime());
     private JTextArea status = new JTextArea();
     private ArrayList<String> acceptedKeys = new ArrayList<String>();
     private ArrayList<Datapacket> data_array = new ArrayList<Datapacket>();
     private ArrayList<ArrayList<String>> data_rows = new ArrayList<ArrayList<String>>();
-    private ArrayList<String> seen_motes;
     private ArrayList<String> header_names = new ArrayList<String>();
-    private BufferedReader keysIn = null;
-    private String logFile = ("./logs/" + startTime.toString().replaceAll("[^a-zA-Z0-9]+", "") + " log.csv");
-    private CSVWriter logger = new CSVWriter(logFile);
-    private CSVWriter outputWriter = new CSVWriter(OUTPUT_FILE);
-    private BufferedWriter dataOut;
+    private String logFile_output = ("./logs/" + startTime.toString().replaceAll("[^a-zA-Z0-9]+", "") + " log.csv");
+  
+    private CSVWriter logger = new CSVWriter(logFile_output);
     private HashMap columnIDs = new HashMap();
+    private HashMap log_columnIDs = new HashMap();
+    private ArrayList<String> log_header_names = new ArrayList<String>();
 
     //-----------Set up 
     private void setup() {
@@ -74,24 +76,82 @@ public class TempsensorHostApplication {
         fr.validate();
         fr.setVisible(true);
     }
+    
+    private void parseLog(){
+        ArrayList<Datapacket> new_data = new ArrayList<Datapacket>();
+        
+        log_columnIDs.put("time", 0);
+        log_header_names.add("time");
+        
+        new_data = pullDataFromCSV(INPUT_LOG);
+        for (int i = 0; i < new_data.size(); i++)
+        {
+            Datapacket new_packet = new_data.get(i);
+            if (!log_columnIDs.containsKey(new_packet.getAddress())){
+                log_columnIDs.put(new_packet.getAddress(), log_columnIDs.size());
+                log_header_names.add(new_packet.getAddress());
+            }
+        }
+        System.out.println(generateOutput(new_data, OUTPUT_LOG, log_columnIDs, log_header_names));
+    }
+    
+    private ArrayList<Datapacket> pullDataFromCSV(String targetFile) {
+        ArrayList<Datapacket> newData = new ArrayList<Datapacket>();
+        Timestamp newTime;
+        String newAddress;
+        int newValue; 
+       
+        ArrayList<String> lines = new ArrayList<String>();
+        String[] currentTokens;
+        ArrayList<ArrayList<String>> dataStrings = new ArrayList<ArrayList<String>>();
+        ArrayList<String> newDataString; 
+        
+        String line;
+        try {
+            BufferedReader dataIn = new BufferedReader(new FileReader(targetFile));
+            while ((line = dataIn.readLine()) != null) {
+                lines.add(line);
+            }
+            dataIn.close();            
+        } catch (IOException e) {
+            
+        }
+        lines.remove(0);
+        for (int i = 0; i < lines.size(); i++){
+            newDataString = new ArrayList<String>();
+            currentTokens = lines.get(i).split(",");
+            for (int j = 0; j < currentTokens.length; j++){
+                newDataString.add(currentTokens[j]);
+            }
+            
+            newAddress = newDataString.get(0);
+            newTime = Timestamp.valueOf(newDataString.get(1));
+            
+            newValue = Integer.parseInt(newDataString.get(2));
+            
+            newData.add(new Datapacket(newAddress, newTime, newValue));
+        }
+        
+        return newData;
+    }
 
-    private void generateOutput(ArrayList<Datapacket> data_array, String filename) {
+private ArrayList<ArrayList<String>> generateOutput(ArrayList<Datapacket> data_array, String filename, HashMap columns, ArrayList<String> headers) {
 
         data_rows.clear();
-        data_rows.add(header_names);
+        data_rows.add(headers);
         
-        Datapacket datum = new Datapacket();
-        ArrayList<String> new_row = new ArrayList<String>();
+        Datapacket datum;
+        ArrayList<String> new_row;
 
         for (int i = 0; i < data_array.size(); i++) {
             datum = data_array.get(i);
             new_row = new ArrayList<String>();
 
-            for (int j = 0; j < columnIDs.size(); j++) {
+            for (int j = 0; j < columns.size(); j++) {
                 if (j == 0) {
-                    new_row.add(datum.getTimeString());
+                    new_row.add("" + datum.getTimeString());
                 } else {
-                    if (j == columnIDs.get(datum.getAddress())) {
+                    if (j == columns.get(datum.getAddress())) {
                         new_row.add("" + datum.getData());
                     } else {
                         new_row.add("");
@@ -100,19 +160,21 @@ public class TempsensorHostApplication {
             }
             data_rows.add(new_row);
         }
-           outputWriter.generateCSV(data_rows);
+        
+        CSVWriter outputWriter = new CSVWriter(filename);
        
-       outputWriter.generateCSV(data_rows);
+        outputWriter.generateCSV(data_rows);
+        return data_rows;
 
     }
 
     private void readKeys() throws IOException { // exception handling not working correctly --
         String line;          //won't crash the app, but needs to be fixed.
-        keysIn = null;
+        BufferedReader keysIn = null;
         int waitDelay = 3000;
         try {
             keysIn = new BufferedReader(new FileReader(KEY_FILE));
-            acceptedKeys.clear();
+            acceptedKeys = new ArrayList<String>();
             while ((line = keysIn.readLine()) != null) {
                 acceptedKeys.add(line);
             }
@@ -143,7 +205,7 @@ public class TempsensorHostApplication {
 
     //This is for receiving data and draw
     private void run() throws Exception {
-
+        parseLog();
         RadiogramConnection rCon;
         Radiogram dg;
         columnIDs.put("time", 0);
@@ -195,12 +257,12 @@ public class TempsensorHostApplication {
                             System.out.println(header_names);
                     }
                     data_array.add(new_data);
-                    generateOutput(data_array, OUTPUT_FILE);
 
                 } else {
                     System.out.println("Connection from " + node + "ignored, not on whitelist.");
                 }
-                generateOutput(data_array, OUTPUT_FILE);
+                generateOutput(data_array, OUTPUT_FILE, columnIDs, header_names);
+                
 
             } catch (Exception e) {
                 System.err.println("Caught " + e + " while reading sensor samples.");
