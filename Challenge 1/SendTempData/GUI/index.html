@@ -26,7 +26,7 @@ g1 = new Dygraph(
   );
   
   window.intervalId = setInterval(function() {
-  g1.updateOptions( { 'file': "current_output.csv"} );}, 1000);
+  g1.updateOptions( { 'file': "current_output.csv"} );}, 10000);
   
   g2 = new Dygraph(
     document.getElementById("graphdiv2"),

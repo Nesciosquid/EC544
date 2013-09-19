@@ -42,10 +42,10 @@ import javax.microedition.midlet.MIDletStateChangeException;
  * @author: Vipul Gupta
  * modified: Ron Goldman
  */
-public class Tempsensor extends MIDlet {
+public class SensorSampler extends MIDlet {
 
     private static final int HOST_PORT = 99;
-    private static final int SAMPLE_PERIOD = 3 * 1000;  // in milliseconds
+    private static final int SAMPLE_PERIOD = 3000;  // in milliseconds
     
     protected void startApp() throws MIDletStateChangeException {
         RadiogramConnection rCon = null;
@@ -73,7 +73,7 @@ public class Tempsensor extends MIDlet {
             try {
                 // Get the current time and sensor reading
                 long now = System.currentTimeMillis();
-                double reading = tempSensor.getFahrenheit();
+                double reading = tempSensor.getCelsius();
                 
                 // Flash an LED to indicate a sampling event
                 led.setRGB(255, 255, 255);

@@ -14,7 +14,7 @@ public class Datapacket {
 
         private String address = "";
         private Timestamp timestamp;
-        private int value;
+        private double value;
         private ArrayList<String> dataStrings = new ArrayList<String>();
 
         public Datapacket() {
@@ -23,14 +23,14 @@ public class Datapacket {
             address = "N/A";
         }
         
-        public Datapacket(String addr, long time, int val)
+        public Datapacket(String addr, long time, double val)
         {
             timestamp = new Timestamp(time);
             value = val;
             address = addr;
         }
         
-        public Datapacket(String addr, Timestamp time, int val)
+        public Datapacket(String addr, Timestamp time, double val)
         {
             timestamp = time;
             value = val;
@@ -53,7 +53,7 @@ public class Datapacket {
             return timestamp.getTime();
         }
 
-        public int getData() {
+        public double getData() {
             return value;
         }
 
@@ -69,7 +69,7 @@ public class Datapacket {
             timestamp.setTime(time);
         }
 
-        public void setData(int data) {
+        public void setData(double data) {
             this.value = data;
         }
     }
