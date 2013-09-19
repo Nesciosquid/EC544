@@ -14,11 +14,11 @@
   g2 = new Dygraph(
     document.getElementById("graphdiv2"),
     "current_output.csv", // path to CSV file
-    {drawPoints: true, connectSeparatedPoints: true, legend: 'always', title: 'Temperature vs. Time by individual Sunspot', ylabel: 'Temperature (C)', xlabel: 'Time', labelsDiv: document.getElementById('labels'), drawPointCallback: Dygraph.Circles.CIRCLE, drawHighlightPointCallback: Dygraph.Circles.CIRCLE, pointsize: 3, highlightCircleSize: 5}          // options
+    {drawPoints: true, connectSeparatedPoints: true, legend: 'always', title: 'Temperature vs. Time by individual Sunspot', ylabel: 'Temperature (C)', xlabel: 'Time', labelsDiv: document.getElementById('labels'), drawPointCallback: Dygraph.Circles.CIRCLE, drawHighlightPointCallback: Dygraph.Circles.CIRCLE, pointsize: 3, highlightCircleSize: 5, showRoller: true}          // options
   );
   
   window.intervalId = setInterval(function() {
-  g2.updateOptions( { 'file': "current_output.csv"} );}, 1000);
+  g2.updateOptions( { 'file': "current_output.csv"} );}, 60000);
 </script>
 </body>
 </html>
