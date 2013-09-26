@@ -44,7 +44,7 @@ import java.io.*;
  *
  * @author Vipul Gupta modified Ron Goldman
  */
-public class RemoteAccessServer {
+public class RemoteAccessCommandServer {
 
     // Configuration variables for destination port, sampling interval
     private static final int HOST_PORT = 99;
@@ -86,6 +86,8 @@ public class RemoteAccessServer {
 
         status.append("Ready to transmit signals on " + HOST_PORT + "...\n");
         
+        System.out.println("Enter commands: on, off");
+        
         while (true){
             String input = bufferRead.readLine();
             System.out.println("You just entered: " + input + "\n");
@@ -116,7 +118,7 @@ public class RemoteAccessServer {
         // register the application's name with the OTA Command server & start OTA running
         OTACommandServer.start("TempsensorHostApplication");
 
-        RemoteAccessServer app = new RemoteAccessServer();
+        RemoteAccessCommandServer app = new RemoteAccessCommandServer();
         app.setup();
         app.run();
     }
