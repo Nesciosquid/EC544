@@ -111,8 +111,8 @@ public class ServoSPOTonCar extends MIDlet {
             myLEDs.getLED(i).setOff();
         }
         setServoForwardValue();
-        progBlinker.startPsilon();
-        velocityBlinker.startPsilon();
+        progBlinker.startCylon();
+        velocityBlinker.startCylon();
         // timeout 1000
         TwoSidedArray robot = new TwoSidedArray(getAppProperty("buddyAddress"), Globals.READ_TIMEOUT);
         try {

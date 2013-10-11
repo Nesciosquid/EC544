@@ -91,19 +91,19 @@ public class BlinkenLights {
 
     public void setLED(int led, int r, int g, int b) {
         if (lightrunner != null) {
-            stopPsilon();
+            stopCylon();
         }
         leds[led].setRGB(r, g, b);
     }
 
-    public void startPsilon() {
-        stopPsilon();
+    public void startCylon() {
+        stopCylon();
         lightrunner = new LightRunner();
         lightrunner.setPriority(Thread.MIN_PRIORITY);
         lightrunner.start();
     }
 
-    public void stopPsilon() {
+    public void stopCylon() {
         if (lightrunner != null) {
             lightrunner.stopThread();
             lightrunner = null;
