@@ -3,6 +3,11 @@ Sun SPOT Radio Signal Strength Meter Demo - Version 1.0
 Author: Ron Goldman
 June 22, 2006
 
+* Modified for Challenge 5
+* Oct 17, 2013
+* We will use this to localize a sunSPOT indoors
+
+
 A simple application for 2 SPOTs. Each SPOT broadcasts 5 packets per
 second and listens for radio broadcasts from the other SPOT. The radio
 signal strength of the packets received is displayed in the SPOT's LEDs.
