@@ -55,7 +55,7 @@ import org.sunspotworld.lib.BlinkenLights;
  * @author Tsuyoshi Miyake <Tsuyoshi.Miyake@Sun.COM>
  * @author Yuting Zhang<ytzhang@bu.edu>
  */
-public class ServoSPOTonCar extends MIDlet {
+public class ServoSPOTonCar extends MIDlet implements ISwitchListener {
 
     private static final int SERVO_CENTER_VALUE = 1500;
     private static final int SERVO1_MAX_VALUE = 2000;
@@ -66,13 +66,17 @@ public class ServoSPOTonCar extends MIDlet {
     private static final int SERVO1_LOW = 300; //steering step low
     private static final int SERVO2_HIGH = 50; //speeding step high
     private static final int SERVO2_LOW = 30; //speeding step low
+    private static int SET_SPEED = 1500;
     // Devices
     private EDemoBoard eDemo = EDemoBoard.getInstance();
     //private ISwitch sw = eDemo.getSwitches()[EDemoBoard.SW1];
-    private IAnalogInput irRightfront = eDemo.getAnalogInputs()[EDemoBoard.A0];
-    private IAnalogInput irLeftfront = eDemo.getAnalogInputs()[EDemoBoard.A1];
-    private IAnalogInput irFront = eDemo.getAnalogInputs()[EDemoBoard.A2];
-    private IAnalogInput irRear = eDemo.getAnalogInputs()[EDemoBoard.A3];
+    private IAnalogInput irRightFront = eDemo.getAnalogInputs()[EDemoBoard.A0];
+    private IAnalogInput irLeftFront = eDemo.getAnalogInputs()[EDemoBoard.A1];
+    private IAnalogInput irRightRear = eDemo.getAnalogInputs()[EDemoBoard.A2];
+    private IAnalogInput irLeftRear = eDemo.getAnalogInputs()[EDemoBoard.A3];
+    private ISwitch sw1 = eDemo.getSwitches()[EDemoBoard.SW1];
+    private ISwitch sw2 = eDemo.getSwitches()[EDemoBoard.SW2];
+    private int STOP = 0;
     private ITriColorLED[] leds = eDemo.getLEDs();
     private ITriColorLEDArray myLEDs = (ITriColorLEDArray) Resources.lookup(ITriColorLEDArray.class);
     // 1st servo for left & right direction 
@@ -85,14 +89,47 @@ public class ServoSPOTonCar extends MIDlet {
     private int current2 = SERVO_CENTER_VALUE;
     private int step1 = SERVO1_LOW;
     private int step2 = SERVO2_LOW;
+    private int direction = 0;
+    private double sensor_distance = 31.75; // cm
     //private int servo1ForwardValue;
     //private int servo2ForwardValue;
     private int servo1Left = SERVO_CENTER_VALUE + SERVO1_LOW;
     private int servo1Right = SERVO_CENTER_VALUE - SERVO1_LOW;
     private int servo2Forward = SERVO_CENTER_VALUE + SERVO2_LOW;
     private int servo2Back = SERVO_CENTER_VALUE - SERVO2_LOW;
+    private int default_turn_cycles = 5;
 
     public ServoSPOTonCar() {
+    }
+
+    public void switchReleased(SwitchEvent sw) {
+        // do nothing
+    }
+
+    public void switchPressed(SwitchEvent sw) {
+        if (sw.getSwitch() == sw1) {
+            if (SET_SPEED > 1000){
+                SET_SPEED -= 100;
+            }
+            else {
+            SET_SPEED = 1500;
+        }
+            /*if (direction == 0) {
+                direction = 1;
+            } else if (direction == 1 || direction == -1) {
+                direction = 0;
+            }*/
+             
+
+        } else if (sw.getSwitch() == sw2) {
+            STOP = 1;
+            servo2.setValue(1500);
+            //if (direction == 0) {
+            //  direction = -1;
+            //} else if (direction == 1 || direction == -1) {
+            //   direction = 0;
+            //}
+        }
     }
 
     /**
@@ -100,6 +137,8 @@ public class ServoSPOTonCar extends MIDlet {
      */
     protected void startApp() throws MIDletStateChangeException {
         System.out.println("Hello, world");
+        sw1.addISwitchListener(this);
+        sw2.addISwitchListener(this);
         BootloaderListenerService.getInstance().start();
 
         for (int i = 0; i < myLEDs.size(); i++) {
@@ -110,66 +149,81 @@ public class ServoSPOTonCar extends MIDlet {
         for (int i = 0; i < myLEDs.size(); i++) {
             myLEDs.getLED(i).setOff();
         }
-        setServoForwardValue();
-        progBlinker.startCylon();
-        velocityBlinker.startCylon();
-        // timeout 1000
-        TwoSidedArray robot = new TwoSidedArray(getAppProperty("buddyAddress"), Globals.READ_TIMEOUT);
-        try {
-            robot.startInput();
-        } catch (Exception e) {
-            e.printStackTrace();
+        
+        for (int i = 0; i < myLEDs.size(); i++){
+            myLEDs.getLED(i).setColor(LEDColor.BLUE);
         }
-
-        //sw.addISwitchListener(this);
+        //setServoForwardValue();
+        //progBlinker.startCylon();
+        //velocityBlinker.startCylon();
+        // timeout 1000
+        /*
+         //TwoSidedArray robot = new TwoSidedArray(getAppProperty("buddyAddress"), Globals.READ_TIMEOUT);
+         try {
+         robot.startInput();
+         } catch (Exception e) {
+         e.printStackTrace();
+         }
+         */
 
 
         velocityBlinker.setColor(LEDColor.BLUE);
         progBlinker.setColor(LEDColor.BLUE);
 
         boolean error = false;
-        while (true) {
-            boolean timeoutError = robot.isTimeoutError();
-            int st = 0;
+        while (STOP != 1) {
+            //boolean timeoutError = robot.isTimeoutError();
+            //int st = 0;
             int rl = 0;
-            if (!timeoutError) {
-                //rl = robot.getVal(0);
-                System.out.println("Servo2 value:" + servo2.getValue());
-                rl = leftOrRight();
-                st = robot.getVal(1);
-                if (error) {
-                    step1 = SERVO1_LOW;
-                    step2 = SERVO2_LOW;
-                    velocityBlinker.setColor(LEDColor.BLUE);
-                    progBlinker.setColor(LEDColor.BLUE);
-                    error = false;
-                }
-                //System.out.println("Checking distance...");
-                //checkDistance();
-                //System.out.println("Done checking distance.");
-                if (st == 1) {
-                    System.out.println("Going forward...");
-                    System.out.println();
-                    forward();
-                } else if (st == -1) {
-                    System.out.println("Going backward...");
-                    backward();
-                } else {
-                    stop();
-                }
-                if (rl > 40) {
-                    right();
-                } else if (rl < -40) {
-                    left();
-                } else {
-                    goStraight();
-                }
-            } else {
-                velocityBlinker.setColor(LEDColor.RED);
-                progBlinker.setColor(LEDColor.RED);
-                error = true;
+            //if (!timeoutError) {
+            //rl = robot.getVal(0);
+            /*System.out.println(" Right front sensor distance: " + getDistance(irRightFront));
+             System.out.println(" Left front sensor distance: " + getDistance(irLeftFront));
+             System.out.println(" Right rear sensor distance: " + getDistance(irRightRear));
+             System.out.println(" Right rear sensor distance: " + getDistance(irLeftRear));*/
+
+            rl = leftOrRight();
+            //st = robot.getVal(1);
+            if (error) {
+                step1 = SERVO1_LOW;
+                step2 = SERVO2_LOW;
+                velocityBlinker.setColor(LEDColor.BLUE);
+                progBlinker.setColor(LEDColor.BLUE);
+                error = false;
             }
+            //System.out.println("Checking distance...");
+            //checkDistance();
+            //System.out.println("Done checking distance.");
+            /*if (direction == 1) {
+                System.out.println("Going forward...");
+                System.out.println();
+                forward();
+            } else if (direction == -1) {
+                System.out.println("Going backward...");
+                backward();
+            } else {
+                stop();
+            }*/
+            forward();
+            if (rl > 40) {
+                System.out.println("Turning right...");
+                right();
+            } else if (rl < -40) {
+                System.out.println("Turning left...");
+                left();
+            } else {
+                goStraight();
+            }
+            /*} else {
+             velocityBlinker.setColor(LEDColor.RED);
+             progBlinker.setColor(LEDColor.RED);
+             error = true;
+             }*/
             Utils.sleep(20);
+            if (STOP ==1)
+            {
+                servo2.setValue(1500);
+            }
         }
     }
 
@@ -185,8 +239,62 @@ public class ServoSPOTonCar extends MIDlet {
         }
     }
 
+    private void offsetLeft() {
+        System.out.println("offsetting left...");
+        for (int i = 0; i < getTurnLength(); i++) {
+            forward();
+            left();
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException ex) {
+            }
+        }
+        int fixTurn = (int) (getTurnLength() / 2);
+        for (int i = 0; i < fixTurn; i++) {
+            forward();
+            right();
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException ex) {
+            }
+        }
+        goStraight();
+
+    }
+    
+    private int getTurnLength(){
+        int speed_diff = 1500 - SET_SPEED; // max speed = 500; min speed = 100;
+        int speed_diff_importance = speed_diff / 500; // max speed = 1; min speed = 1/5;
+        int turn_length_adjust = (int)(speed_diff_importance * (default_turn_cycles / 2));
+        return default_turn_cycles - turn_length_adjust;
+    }
+
+    private void offsetRight() {
+        System.out.println("Offsetting right...");
+
+        for (int i = 0; i < getTurnLength(); i++) {
+            forward();
+            right();
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException ex) {
+            }
+        }
+        int fixTurn = (int) (getTurnLength() / 2);
+        for (int i = 0; i < fixTurn; i++) {
+            forward();
+            left();
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException ex) {
+            }
+        }
+        goStraight();
+
+    }
+
     private void left() {
-        //System.out.println("left");
+        System.out.println("left");
         current1 = servo1.getValue();
         if (current1 + step1 < SERVO1_MAX_VALUE) {
             servo1.setValue(current1 + step1);
@@ -198,7 +306,7 @@ public class ServoSPOTonCar extends MIDlet {
     }
 
     private void right() {
-        //System.out.println("right");
+        System.out.println("right");
         current1 = servo1.getValue();
         if (current1 - step1 > SERVO1_MIN_VALUE) {
             servo1.setValue(current1 - step1);
@@ -223,41 +331,102 @@ public class ServoSPOTonCar extends MIDlet {
     }
 
     private void backward() {
-        System.out.println("backward");
         //servo2.setValue(SERVO_CENTER_VALUE + step2);
-        servo2.setValue(1400);
+        servo2.setValue(1600);
     }
 
     private void forward() {
-        System.out.println("forward");
         //servo2.setValue(SERVO_CENTER_VALUE - step2);
-        servo2.setValue(1600);
+        servo2.setValue(SET_SPEED);
     }
 
     private int leftOrRight() {
         int rl_val = 0;
-        double left = getDistance(irLeftfront);
-        double right = getDistance(irRightfront);
-        if (left < 20) {
-            rl_val = 50;
-            System.out.println("Setting RL high to turn right");
-        } else if (right < 20) {
-            rl_val = -50;
-            System.out.println("Setting RL low to turn left");
+        double LF = getDistance(irLeftFront);
+        double LR = getDistance(irLeftRear);
+        double RF = getDistance(irRightFront);
+        double RR = getDistance(irRightRear);
+        double averageLeft = (LF + LR) / 2;
+        double averageRight = (RF + RR) / 2;
 
-        } else {
-            rl_val = 0;
+        /*if (averageLeft < averageRight) {
+         if (averageLeft < 20) {
+         rl_val = 50;
+         System.out.println("Setting RL high to turn right");
+         } else {
+         rl_val = 0;
+         }
+         } else if (averageRight < averageLeft) {
+         if (averageRight < 20) {
+         rl_val = -50;
+         System.out.println("Setting RL low to turn left");
+         } else {
+         rl_val = 0;
+         }
+         } else {
+         rl_val = 0;
+         }*/
+
+        if (averageLeft < averageRight) { // closer to left wall, so use left sensors
+            double left_diff = LF - LR;
+            double left_diff_importance = Math.abs(left_diff) / averageLeft;
+            if (averageLeft > 30){ // If the left wall is closer, but farther than half the hall away, turn toward it. (Alcove on right!)
+                rl_val = 0;
+            }
+            else {
+            //System.out.println("Left diff importance" + left_diff_importance);
+            if (left_diff_importance > .05) { // significant difference between front and back sensors
+                if (left_diff > 0) { // LR is closer to wall than LF
+                    if (averageLeft < 15)
+                        rl_val = 0; // go forward -- you might be too close to correct angle!
+                    else 
+                        rl_val = -50; // adjust the steering left to straighten out.
+                } else if (left_diff < 0) // LF is closer to wall than LR
+                {
+                    rl_val = 50; // Set RL high to turn right
+                }
+            } else if (averageLeft < 15) {
+                offsetRight(); // Continue going straight (for now!) Should replace with an offset-position method!
+            } 
+            else {
+                rl_val = 0;
+            }
+            }
+
+        } else if (averageRight < averageLeft) {
+            double right_diff = RF - RR;
+            double right_diff_importance = Math.abs(right_diff) / averageRight;
+            if (averageRight > 30){ // If the right wall is closer, but farther than half the hall away, don't turn. (Alcove on left!)
+                rl_val = 0;
+            }
+            else {
+            //System.out.println("right difference" + right_diff_importance);
+            if (right_diff_importance > .05) { // significant difference between front and back sensors
+                if (right_diff > 0) { // RR is closer to wall than RF
+                    if (averageRight < 15)
+                    rl_val = 0; // go forward -- you might be too close to correct angle!
+                    else 
+                        rl_val = 50; // turn right to straighten out
+                } else if (right_diff < 0) // LF is closer to wall than LR
+                {
+                    rl_val = -50; // Set RL low to turn left
+                }
+            } else if (averageRight < 15) {
+                offsetLeft();
+            } else {
+                rl_val = 0; // Continue going straight (for now!) Should replace with an offset-position method!
+            }
+        }
         }
         return rl_val;
-
     }
 
     private void checkDistance() {
-        if (getDistance(irLeftfront) < 20) {
+        if (getDistance(irLeftFront) < 20) {
             myLEDs.getLED(7).setColor(LEDColor.RED);
             System.out.println("Turning right.");
             right();
-        } else if (getDistance(irRightfront) < 20) {
+        } else if (getDistance(irRightFront) < 20) {
             myLEDs.getLED(0).setColor(LEDColor.RED);
             System.out.println("Turning left.");
             left();
