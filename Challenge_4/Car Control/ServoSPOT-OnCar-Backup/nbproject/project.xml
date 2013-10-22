@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    This is a sample netbeans project file for a Sun Spot Application project.
+    You may edit it freely, it doesn't affect the ant-powered build.
+
+ -->
+<project xmlns="http://www.netbeans.org/ns/project/1">
+    <type>org.netbeans.modules.ant.freeform</type>
+    <configuration>
+        <general-data xmlns="http://www.netbeans.org/ns/freeform-project/1">
+            <name>ServoSPOT-OnCar-Backup</name>
+            <properties>
+                <property-file>${user.home}/.sunspot.properties</property-file>
+                <property-file>build.properties</property-file>
+                <property-file>${sunspot.home}/default.properties</property-file>
+                <property-file>${netbeans.user}/build.properties</property-file>
+            </properties>
+            <folders>
+                <source-folder>
+                    <label>src</label>
+                    <type>java</type>
+                    <location>src</location>
+                </source-folder>
+            </folders>
+            <ide-actions>
+                <action name="build">
+                    <target>jar-app</target>
+                </action>
+                <action name="clean">
+                    <target>clean</target>
+                </action>
+                <action name="run">
+                    <target>deploy-run</target>
+                </action>
+                <action name="rebuild">
+                    <target>clean</target>
+                    <target>jar-app</target>
+                </action>
+                <action name="compile.single">
+                    <script>nbproject/ide-file-targets.xml</script>
+                    <target>compile-selected-files-in-src</target>
+                    <context>
+                        <property>files</property>
+                        <folder>src</folder>
+                        <pattern>\.java$</pattern>
+                        <format>relative-path</format>
+                        <arity>
+                            <separated-files>,</separated-files>
+                        </arity>
+                    </context>
+                </action>
+            </ide-actions>
+            <export>
+                <type>folder</type>
+                <location>build</location>
+                <build-target>jar-app</build-target>
+            </export>
+            <view>
+                <items>
+                    <source-folder style="packages">
+                        <label>src</label>
+                        <location>src</location>
+                    </source-folder>
+                    <source-file>
+                        <location>build.xml</location>
+                    </source-file>
+                </items>
+                <context-menu>
+                    <ide-action name="build"/>
+                    <ide-action name="rebuild"/>
+                    <ide-action name="clean"/>
+                    <ide-action name="run"/>
+                    <action>
+                        <label>Build Project + Deploy to Sun SPOT</label>
+                        <target>deploy</target>
+                    </action>
+                    <action>
+                        <label>Deploy to Sun SPOT</label>
+                        <target>jar-deploy</target>
+                    </action>
+                    <separator/>
+                </context-menu>
+            </view>
+            <subprojects/>
+        </general-data>
+        <java-data xmlns="http://www.netbeans.org/ns/freeform-project-java/3">
+            <compilation-unit>
+                <package-root>src</package-root>
+                <classpath mode="boot">${sunspot.bootclasspath}</classpath>
+                <classpath mode="compile">C:\Program Files\Sun\SunSPOT\sdk\lib\CHTTPlib.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\RXTXcomm.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\SSL_device.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\WoTlib-common.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\WoTlib-device.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\WoTlib-host.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\create_device.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\create_host.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\crypto_common.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\gluegen-rt.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\ip_gateway_host.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\ipv6lib_common.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\junit.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\multihop_common.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\networktools_host.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\sdcard_device.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\signing_host.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\socket_proxy_host.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\spotclient_crypto.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\spotclient_host.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\spotlib_common.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\spotlib_device.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\spotlib_host.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\spottestframework_device.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\squawk_common.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\squawk_device.jar;C:\Program Files\Sun\SunSPOT\sdk\lib\transducer_device.jar</classpath>
+                <built-to>build</built-to>
+                <source-level>1.7</source-level>
+            </compilation-unit>
+        </java-data>
+    </configuration>
+</project>
