@@ -30,7 +30,11 @@ public class IRDaemon {
     private double confidenceCutoffStep = 0.15;
     private double straightTolerance = 5.0;
     private double idealTheta = 0.0;
+    private double[] recentThetas = new double[]{0.0, 0.0, 0.0};
+    private double avgTheta;
     //Class data variables
+    public double[] recentDists = new double[]{0.0, 0.0, 0.0};
+    public double avgDist;
     public double thetaLeft; // angle of car in radians
     public double thetaRight; // > 0, turned right; < 0, turned left
     public double distanceLF; // distance left-front sensor to wall in IR units
@@ -56,17 +60,66 @@ public class IRDaemon {
     double turnDistance = 30.0;
     double maxTurnAngle = 20.0;
     double maxTurnFactor = 1.0;
-    
-    public int calcTurnFromDistance(double current_distance, double desired_distance){
+
+    public void storeDist(double new_dist) {
+        double[] tempDists = recentDists;
+        double distSum = 0.0;
+        if (new_dist < 0) { // new dist is a left value
+            for (int i = 0; i < recentDists.length; i++) {
+                if (i == 0) {
+                    recentDists[i] = new_dist;
+                } else {
+                    if (tempDists[i - 1] < 0) { // old dist is a left value
+                        recentDists[i] = tempDists[i - 1]; // add as next element 
+                    } else {
+                        recentDists[i] = new_dist; // re-add new element
+                    }
+                }
+                distSum += recentDists[i];
+
+            }
+        } else {
+            for (int i = 0; i < recentDists.length; i++) {
+                if (i == 0) {
+                    recentDists[i] = new_dist;
+                } else {
+                    if (tempDists[i - 1] < 0) {
+                        recentDists[i] = new_dist;
+                    } else {
+                        recentDists[i] = tempDists[i - 1];
+                    }
+                }
+                                    distSum += recentDists[i];
+            }
+        }
+        avgDist = (distSum / recentDists.length);
+    }
+
+    public void storeTheta(double new_theta) {
+        double[] tempThetas = recentThetas;
+        double thetaSum = 0.0;
+        for (int i = 0; i < recentThetas.length; i++) {
+            if (i == 0) {
+                recentThetas[i] = new_theta;
+            } else {
+                recentThetas[i] = tempThetas[i - 1];
+            }
+            thetaSum += recentThetas[i];
+        }
+        avgTheta = (thetaSum / recentThetas.length);
+
+    }
+
+    public int calcTurnFromDistance(double current_distance, double desired_distance) {
         //System.out.println(current_distance + " away, want to be " + desired_distance);
         int turn;
-        double distanceDifference = Math.abs(Math.abs(current_distance) -Math.abs(desired_distance));
+        double distanceDifference = Math.abs(Math.abs(current_distance) - Math.abs(desired_distance));
         //System.out.println("Distance Difference: " + distanceDifference);
-        double turnRatio = distanceDifference / turnDistance; 
+        double turnRatio = distanceDifference / turnDistance;
         double turnFactor = turnRatio * turnRatio; // squared, so that larger difference == exponentially larger turn
 
         //System.out.println("Turn factor: " + turnFactor);
-        if (turnFactor > maxTurnFactor){
+        if (turnFactor > maxTurnFactor) {
             turnFactor = maxTurnFactor; // max is 2.0
             //System.out.println("Turn factor clipped to: " + turnFactor );
         }
@@ -74,27 +127,27 @@ public class IRDaemon {
         //System.out.println("Calculated turn:" + turn);
         return turn;
     }
-    
-    public int calcTurnFromAngle(double current_angle_rad, double desired_angle_rad){
-       double currentAngle = Math.abs(toDegrees(current_angle_rad));
-       double desiredAngle=  Math.abs(toDegrees(desired_angle_rad));
-       //System.out.println(currentAngle + " is current angle, want to be " + desiredAngle);
+
+    public int calcTurnFromAngle(double current_angle_rad, double desired_angle_rad) {
+        double currentAngle = Math.abs(toDegrees(current_angle_rad));
+        double desiredAngle = Math.abs(toDegrees(desired_angle_rad));
+        //System.out.println(currentAngle + " is current angle, want to be " + desiredAngle);
 
         int turn;
         double angleDifference = Math.abs(currentAngle - desiredAngle);
-         //       System.out.println("Angle Difference: " + angleDifference);
+        //       System.out.println("Angle Difference: " + angleDifference);
 
         double turnRatio = (angleDifference / maxTurnAngle);
         double turnFactor = turnRatio * turnRatio; // squared, so that larger difference == exponentially larger turn
-        
+
         //System.out.println("Turn factor: " + turnFactor);
-        if (turnFactor > maxTurnFactor){
+        if (turnFactor > maxTurnFactor) {
             turnFactor = maxTurnFactor;
-          //              System.out.println("Turn factor clipped to: " + turnFactor );
+            //              System.out.println("Turn factor clipped to: " + turnFactor );
 
         }
         turn = 50 + (int) (450 * turnFactor);
-            //    System.out.println("Calculated turn:" + turn);
+        //    System.out.println("Calculated turn:" + turn);
 
         return turn;
     }
@@ -208,24 +261,24 @@ public class IRDaemon {
             return false;
         }
     }
-    
-    private boolean isFarFromWall(double distance){
-      if ((Math.abs(distance) > wallNear)) {
+
+    private boolean isFarFromWall(double distance) {
+        if ((Math.abs(distance) > wallNear)) {
             return true;
         } else {
             return false;
         }
-    
-        
+
+
     }
-    
-    private boolean isStraight(double theta_rad){
+
+    private boolean isStraight(double theta_rad) {
         double theta = toDegrees(theta_rad);
-        if (Math.abs(theta) <= straightTolerance){
+        if (Math.abs(theta) <= straightTolerance) {
             return true;
-        }
-        else 
+        } else {
             return false;
+        }
     }
 
     private boolean isTurnedLeft(double theta_rad) {
@@ -247,7 +300,7 @@ public class IRDaemon {
     }
 
     public String pickDirection() {
-        
+
         boolean ignoreDistance = false;
         double theta;
         double distance;
@@ -269,7 +322,7 @@ public class IRDaemon {
             //return "slight-left";
             theta = thetaLeft;
             distance = distanceAvgL;
-            if (isFarFromWall(distance)){
+            if (isFarFromWall(distance)) {
                 turnSuggest = 1500 + calcTurnFromDistance(distance, idealDistance);
                 //return "tiny-left";
                 return "too far from left wall";
@@ -278,74 +331,65 @@ public class IRDaemon {
             //return "slight-right";
             theta = thetaRight;
             distance = distanceAvgR;
-              if (isFarFromWall(distance)){
+            if (isFarFromWall(distance)) {
                 turnSuggest = 1500 - calcTurnFromDistance(distance, idealDistance);
                 return "too far from right wall";
             }
         } else if (Math.abs(L - R) < 2) {
             distance_diff = distanceAvgR - distanceAvgL;
             theta = (thetaRight + thetaLeft) / 2;
-            if (Math.abs(distance_diff) <= 5)
-            {
+            if (Math.abs(distance_diff) <= 5) {
                 ignoreDistance = true;
                 distance = distanceAvgR; // simper than converting left value, fix later
-                        }
-            else if (distance_diff > 5){
+            } else if (distance_diff > 5) {
                 distance = -distanceAvgL;
-                if (distance == 0)
-                {
+                if (distance == 0) {
                     distance = -.1;
                 }
-            }
-            else {
+            } else {
                 distance = distanceAvgR;
-                if (distance == 0)
-                {
+                if (distance == 0) {
                     distance = .1;
-                }}
-        }
-         else {
+                }
+            }
+        } else {
             speedSuggest = 1400;
             return "unknown";
         }
-        
-        if (isCloseToWall(distance) && !ignoreDistance){
-            if (distance < 0){
-                
-                                turnSuggest = 1500 - calcTurnFromDistance(distance, idealDistance);
-                                //return "slight-right";
-                                return "too close to left wall";
-                                
-            }
-            else {
+
+        if (isCloseToWall(distance) && !ignoreDistance) {
+            if (distance < 0) {
+
+                turnSuggest = 1500 - calcTurnFromDistance(distance, idealDistance);
+                //return "slight-right";
+                return "too close to left wall";
+
+            } else {
                 turnSuggest = 1500 + calcTurnFromDistance(distance, idealDistance);
                 //return "slight-left";
                 return "too close to right wall";
 
+            }
         }
-        }     
-        
-        if (!isStraight(theta)){
-             if (isTurnedLeft(theta)){
-                 turnSuggest = 1500 - calcTurnFromAngle(theta, idealTheta);
-            //return "slight-right";
-                 return "turned to the left, correcting right";
-        }
-        else if (isTurnedRight(theta)){
-            turnSuggest = 1500 + calcTurnFromAngle(theta, idealTheta);
-            //return "slight-left";
-            return "turned to the right, correcting left";
-        }
-        else 
-            speedSuggest = 1400;
+
+        if (!isStraight(theta)) {
+            if (isTurnedLeft(theta)) {
+                turnSuggest = 1500 - calcTurnFromAngle(theta, idealTheta);
+                //return "slight-right";
+                return "turned to the left, correcting right";
+            } else if (isTurnedRight(theta)) {
+                turnSuggest = 1500 + calcTurnFromAngle(theta, idealTheta);
+                //return "slight-left";
+                return "turned to the right, correcting left";
+            } else {
+                speedSuggest = 1400;
+            }
             return "unknown";
-             
+
+        } else {
+            turnSuggest = 1500;
+            return "straight";
         }
-        
-        else{
-        turnSuggest = 1500;
-        return "straight";
-    }
     }
 
     private void updateConfidence() {
