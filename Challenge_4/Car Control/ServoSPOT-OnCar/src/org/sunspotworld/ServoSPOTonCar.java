@@ -74,7 +74,7 @@ public class ServoSPOTonCar extends MIDlet implements ISwitchListener {
     private static double MAX_TRACKING_ANGLE = 30.0;
     private static double CONFIDENCE_HIGH_CUTOFF = .80;
     private static double CONFIDENCE_CUTOFF_STEP = .15;
-    private static int MIN_TURN_DIFF = 30;
+    private static int MIN_TURN_DIFF = 10;
     private static boolean REVERSE_LEDS = false;
     // Devices
     private EDemoBoard eDemo = EDemoBoard.getInstance();
@@ -349,7 +349,7 @@ public class ServoSPOTonCar extends MIDlet implements ISwitchListener {
     private void driveSlow(){
         if (setSpeed < 1400){
         updateServo(speedServo, slowSpeed, SPEED_HIGH_STEP);
-        }
+        }   
     }
     private void updateServo(Servo target_servo, int target_value, int acceleration) {
         int currentValue = target_servo.getValue();
