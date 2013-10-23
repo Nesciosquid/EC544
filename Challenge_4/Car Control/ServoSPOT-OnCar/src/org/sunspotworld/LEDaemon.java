@@ -26,7 +26,7 @@ public class LEDaemon {
     int rightRED = 0;
     int rightGREEN = 0;
     int rightBLUE = 0;
-    double maxAngle = 30;
+    double maxAngle = 45;
 
     public LEDaemon(ITriColorLEDArray new_leds) {
         LEDs = new_leds;

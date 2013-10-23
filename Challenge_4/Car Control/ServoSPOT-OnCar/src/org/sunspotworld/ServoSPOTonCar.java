@@ -59,21 +59,22 @@ import org.sunspotworld.lib.BlinkenLights;
 public class ServoSPOTonCar extends MIDlet implements ISwitchListener {
 
     private static final int SERVO_CENTER_VALUE = 1500; // go straight (wheels, servo1), or stop (motor, servo2)
-    private static final int TURN_MAX_VALUE = 2000; // max turn right, max should be 2000
-    private static final int TURN_MIN_VALUE = 1000; // max turn left, min should be 1000
+    private static final int TURN_MAX_VALUE = 2000; // max turn left, max should be 2000
+    private static final int TURN_MIN_VALUE = 1000; // max turn right, min should be 1000
     private static final int SPEED_MAX_VALUE = 2000; // go backwards fast
     private static final int SPEED_MIN_VALUE = 1000; // go forward fast
     private static final int SERVO_MAX_VALUE = 2000;
     private static final int SERVO_MIN_VALUE = 1000;
+    private static final int SAMPLE_TIME = 50;
     private static final int TURN_HIGH_STEP = 500; //steering step high
-    private static final int TURN_LOW_STEP = 50; //steering step low
+    private static final int TURN_LOW_STEP = 20; //steering step low
     private static final int SPEED_HIGH_STEP = 50; //speeding step high
     private static final int SPEED_LOW_STEP = 30; //speeding step low
     private static double CAR_LENGTH = 10.0; // in 'IR' units, whatever those are
-    private static double CONFIDENCE_DISTANCE = 12.0; // in 'IR' units
+    private static double CONFIDENCE_DISTANCE = 20.0; // in 'IR' units
     private static double MAX_TRACKING_ANGLE = 30.0;
-    private static double CONFIDENCE_HIGH_CUTOFF = .80;
-    private static double CONFIDENCE_CUTOFF_STEP = .15;
+    private static double CONFIDENCE_HIGH_CUTOFF = 1.00;
+    private static double CONFIDENCE_CUTOFF_STEP = .25;
     private static int MIN_TURN_DIFF = 10;
     private static boolean REVERSE_LEDS = false;
     // Devices
@@ -143,6 +144,7 @@ public class ServoSPOTonCar extends MIDlet implements ISwitchListener {
         sw2.addISwitchListener(this);
         IRDaemon d = new IRDaemon(irRightFront, irLeftFront, irRightRear, irLeftRear, CAR_LENGTH, CONFIDENCE_DISTANCE);
         LEDaemon l = new LEDaemon(myLEDs, REVERSE_LEDS, CONFIDENCE_HIGH_CUTOFF, CONFIDENCE_CUTOFF_STEP, MAX_TRACKING_ANGLE);
+        turnHard();
         BootloaderListenerService.getInstance().start();
 
         for (int i = 0; i < myLEDs.size(); i++) {
@@ -157,6 +159,7 @@ public class ServoSPOTonCar extends MIDlet implements ISwitchListener {
 
         
         boolean error = false;
+
         while (STOP != 1) {
             
             //boolean timeoutError = robot.isTimeoutError();
@@ -166,13 +169,13 @@ public class ServoSPOTonCar extends MIDlet implements ISwitchListener {
             //rl = robot.getVal(0);
             //rl = leftOrRight();
             d.update();
-            d.report();
+            
             l.changeColors(d.thetaRight, d.thetaLeft, d.confidenceRF, d.confidenceLF, d.confidenceRR, d.confidenceLR);
-            String command = d.pickTarget();
-            if (Math.abs(setTurn - d.turnSuggest) > MIN_TURN_DIFF){
-                setTurn = d.turnSuggest;
-            }
+            String command = d.pickDirection();
             setTurn = d.turnSuggest;
+            //d.report();
+            //System.out.println("Suggested turn value: " + setTurn);
+
             //System.out.println("setting turn to: setTurn");
             //System.out.println("Turn servo set to: " + turnServo.getValue());
             //System.out.println(command);
@@ -217,7 +220,8 @@ public class ServoSPOTonCar extends MIDlet implements ISwitchListener {
              error = false;
              }*/
             
-            steer();
+            //steer();
+            turnHard();
             if (command == "unknown"){
                 driveSlow();
             }
@@ -228,7 +232,7 @@ public class ServoSPOTonCar extends MIDlet implements ISwitchListener {
              progBlinker.setColor(LEDColor.RED);
              error = true;
              }*/
-            Utils.sleep(1000);
+            Utils.sleep(SAMPLE_TIME);
             if (STOP == 1) {
                 speedServo.setValue(1500);
             }
@@ -339,7 +343,23 @@ public class ServoSPOTonCar extends MIDlet implements ISwitchListener {
     }
     
     private void steer(){
-        updateServo(turnServo, setTurn, TURN_HIGH_STEP);
+        updateServo(turnServo, setTurn, TURN_LOW_STEP);
+        //System.out.println("Turning: " + setTurn);
+    }
+    
+    private void turnHard(){
+        setServo(turnServo, setTurn);
+        //System.out.println("Turning Hard: " + setTurn);
+                System.out.println("SetTurn: " + setTurn);
+        if (setTurn < 1500){
+            //System.out.println("****car sould be turning right");
+        }
+        else if (setTurn > 1500){
+                //System.out.println("***Car should be turning left");
+            }
+            else {
+               // System.out.println("Car should be going straight");
+        }
     }
     
     private void drive(){
@@ -350,6 +370,10 @@ public class ServoSPOTonCar extends MIDlet implements ISwitchListener {
         if (setSpeed < 1400){
         updateServo(speedServo, slowSpeed, SPEED_HIGH_STEP);
         }   
+    }
+    
+    private void setServo(Servo target_servo, int target_value){
+        target_servo.setValue(target_value);
     }
     private void updateServo(Servo target_servo, int target_value, int acceleration) {
         int currentValue = target_servo.getValue();
