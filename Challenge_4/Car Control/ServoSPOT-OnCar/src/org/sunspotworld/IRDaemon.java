@@ -16,15 +16,22 @@ import java.io.IOException;
 public class IRDaemon {
     // IR sensors
 
+    private boolean isLeftPreferred = true;
     private IAnalogInput irRightFront;
     private IAnalogInput irLeftFront;
     private IAnalogInput irRightRear;
     private IAnalogInput irLeftRear;
     // Trig coefficients
+    private boolean dynamicHallwaySize = false;
     private double wallNear = 15.0;
     private double wallFar = 35.0;
-    private double idealDistance = 19.0;
-    private double closeDistance = 15.0;
+    private double defaultHallSize = 42.0;
+    private double defaultTheta = 0.0;
+    private double defaultTarget = 0.0;
+    private double defaultDistance = 0.0;
+    private double idealDistance = 20.0;
+    private double middleDistance = defaultHallSize / 2;
+    private double closeDistance = 20.0; // 17.0 works great
     private double sensorDistance = 10.0;// in IR units
     private double confidenceDistance = 20.0; // in IR units
     private double confidenceHighCutoff = 1.00;
@@ -32,11 +39,15 @@ public class IRDaemon {
     private double straightTolerance = 5.0;
     private double confidenceThresh = .03;
     private double idealTheta = 0.0;
-    private double[] recentThetas = new double[]{0.0, 0.0, 0.0};
+    private int averageSamples = 3;
+    private double[] recentHalls = new double[averageSamples];
+    private double avgHall = defaultHallSize;
+    private double sdHall = 0.0;
+    private double[] recentThetas = new double[averageSamples];
     private double avgTheta;
     //Class data variables
-    public double[] recentDists = new double[]{0.0, 0.0, 0.0};
-    public double[] recentTargets = new double[]{0.0, 0.0, 0.0};
+    public double[] recentDists = new double[averageSamples];
+    public double[] recentTargets = new double[averageSamples];
     public double avgTarget;
     public double avgDist;
     public double thetaLeft; // angle of car in radians
@@ -62,13 +73,35 @@ public class IRDaemon {
     int turnRightMax = 1000;
     int turnLeftMax = 2000;
     //double turnDistance = 30.0;
-    double maxTurnDistance = 20;
+    double maxTurnDistance = 13.5;
     double maxTurnAngle = 20.0;
     double approachAngle = 20.0;
     double maxTurnFactor = 1.0;
     double maxDistFactor = 1.0;
     double maxAngleFactor = 1.0;
-    double maxConfidenceAngle = 45;
+    double maxHallConfidence = 1.25; // if new hall distance is > 1.25 of average, beware!
+    double maxConfidenceAngle = 30;
+
+    public double stDev(double[] data) {
+        double diff = 0.0;
+        double sum = 0.0;
+        double sdSum = 0.0;
+        double avg = average(data);
+        for (int i = 0; i < data.length; i++) {
+            diff += (data[i] - avg);
+            sdSum += (diff * diff);
+        }
+        return (Math.sqrt(sdSum / data.length));
+    }
+
+    private double average(double[] data) {
+        double sum = 0.0;
+        for (int i = 0; i < data.length; i++) {
+            sum += data[i];
+        }
+        return sum / data.length;
+
+    }
 
     public double toRadians(double theta_deg) {
         return theta_deg * .0174532925;
@@ -99,6 +132,18 @@ public class IRDaemon {
         return turn;
     }
 
+    public void initRecents() {
+        for (int i = 0; i < averageSamples; i++) {
+            storeTheta(defaultTheta);
+            storeTarget(defaultTarget);
+            storeDistance(defaultDistance);
+        }
+        for (int i = 0; i < recentHalls.length; i++) {
+            storeHall(defaultHallSize);
+        }
+
+    }
+
     public int calcIdealTurn(double set_distance, double current_distance, double current_theta) {
         double set_theta = calcIdealTheta(set_distance, current_distance);
         return calcTurn(set_theta, current_theta);
@@ -106,23 +151,19 @@ public class IRDaemon {
 
     public void storeTarget(double new_theta) {
         double[] tempTargets = recentTargets;
-        double targetSum = 0.0;
-
         for (int i = 0; i < recentTargets.length; i++) {
             if (i == 0) {
                 recentTargets[i] = new_theta;
             } else {
                 recentTargets[i] = tempTargets[i - 1];
             }
-            targetSum += recentTargets[i];
         }
-        avgTarget = (targetSum / recentTargets.length);
+        avgTarget = average(recentTargets);
 
     }
 
     private void storeDistance(double new_dist) {
         double[] tempDists = recentDists;
-        double distSum = 0.0;
         if (new_dist < 0) { // new dist is a left value
             for (int i = 0; i < recentDists.length; i++) {
                 if (i == 0) {
@@ -131,11 +172,9 @@ public class IRDaemon {
                     if (tempDists[i - 1] < 0) { // old dist is a left value
                         recentDists[i] = tempDists[i - 1]; // add as next element 
                     } else {
-                        recentDists[i] = new_dist; // re-add new element
+                        recentDists[i] = -(avgHall - tempDists[i - 1]);
                     }
                 }
-                distSum += recentDists[i];
-
             }
         } else {
             for (int i = 0; i < recentDists.length; i++) {
@@ -143,30 +182,47 @@ public class IRDaemon {
                     recentDists[i] = new_dist;
                 } else {
                     if (tempDists[i - 1] < 0) {
-                        recentDists[i] = new_dist;
+                        recentDists[i] = (avgHall + tempDists[i - 1]);
                     } else {
                         recentDists[i] = tempDists[i - 1];
                     }
                 }
-                distSum += recentDists[i];
             }
         }
-        avgDist = (distSum / recentDists.length);
+        avgDist = average(recentDists);
+    }
+
+    private double calcHall(double left_distance, double right_distance) {
+        return (left_distance + right_distance);
+    }
+
+    private void updateMiddle() {
+        middleDistance = avgHall;
     }
 
     private void storeTheta(double new_theta) {
         double[] tempThetas = recentThetas;
-        double thetaSum = 0.0;
         for (int i = 0; i < recentThetas.length; i++) {
             if (i == 0) {
                 recentThetas[i] = new_theta;
             } else {
                 recentThetas[i] = tempThetas[i - 1];
             }
-            thetaSum += recentThetas[i];
         }
-        avgTheta = (thetaSum / recentThetas.length);
+        avgTheta = average(recentThetas);
+    }
 
+    private void storeHall(double new_hall) {
+        double[] tempHalls = recentHalls;
+        for (int i = 0; i < recentHalls.length; i++) {
+            if (i == 0) {
+                recentHalls[i] = new_hall;
+            } else {
+                recentHalls[i] = tempHalls[i - 1];
+            }
+        }
+        avgHall = average(recentHalls);
+        updateMiddle();
     }
 
     public int calcTurnFromDistance(double current_distance, double desired_distance) {
@@ -212,6 +268,7 @@ public class IRDaemon {
     }
 
     public IRDaemon() { // for calculations only
+        initRecents();
     }
 
     public IRDaemon(IAnalogInput RF, IAnalogInput LF, IAnalogInput RR, IAnalogInput LR) {
@@ -219,6 +276,7 @@ public class IRDaemon {
         irLeftFront = LF;
         irRightRear = RR;
         irLeftRear = LR;
+        initRecents();
     }
 
     public IRDaemon(IAnalogInput RF, IAnalogInput LF, IAnalogInput RR, IAnalogInput LR, double distance, double conf) {
@@ -228,6 +286,7 @@ public class IRDaemon {
         irLeftRear = LR;
         sensorDistance = distance;
         confidenceDistance = conf;
+        initRecents();
     }
 
     public void update() {
@@ -273,32 +332,27 @@ public class IRDaemon {
     }
 
     public void report() {
-        System.out.println("--------");
+
+        System.out.println("Distance from left wall: " + -distanceAvgL + ", confidence: " + confidenceAvgL);
+        System.out.println("Distance from right wall: " + distanceAvgR + ", confidence: " + confidenceAvgR);
+        System.out.println("Average distance: " + avgDist);
+        //System.out.println("Average hall size:" + avgHall);
+        //System.out.println("Estimated hall size: " + calcHall(distanceAvgL, distanceAvgR));
         System.out.println("Theta Left (deg): " + toDegrees(thetaLeft));
         System.out.println("Theta Right (deg): " + toDegrees(thetaRight));
         System.out.println("Theta average: " + toDegrees(avgTheta));
-        System.out.println("Distance from left wall: " + -distanceAvgL);
-        System.out.println("Distance from right wall: " + distanceAvgR);
-        System.out.println("Confidence in left: " + confidenceAvgL);
-        System.out.println("Confidence in right: " + confidenceAvgR);
-        //System.out.println("Estimated hall size:" + (distanceAvgL + distanceAvgR));
-        //System.out.println("Direction you should go: " + pickDirection());
-        System.out.println("Average distance: " + avgDist);
-        //System.out.println("Right confidence difference: " + Math.abs(confidenceRF - confidenceRR));
-        //System.out.println("Left confidence difference: " + Math.abs(confidenceLF - confidenceLR));
         System.out.println("Calculated target theta: " + toDegrees(idealTheta));
-        System.out.println("Calculated target turn: " + turnSuggest);
-        System.out.println("--------");
+        //System.out.println("Calculated target turn: " + turnSuggest);
 
     }
 
     private int calcTrust(double conf1, double conf2) {
-        
+
         double step4 = confidenceHighCutoff;
         double step3 = step4 - confidenceCutoffStep;
         double step2 = step3 - confidenceCutoffStep;
         double step1 = step2 - confidenceCutoffStep;
-                System.out.println("Step4, Step3, Step2, Step1: " + step4 + ", " + step3 + ", " + step2 + ", " + step1);
+        //System.out.println("Step4, Step3, Step2, Step1: " + step4 + ", " + step3 + ", " + step2 + ", " + step1);
         int trust;
         double lesser;
         if (conf1 < conf2) {
@@ -321,12 +375,16 @@ public class IRDaemon {
     }
 
     private int leftTrust() {
-        return calcTrust(confidenceLF, confidenceLR);
+        int trust = calcTrust(confidenceLF, confidenceLR);
+        System.out.println("Left trust:" + trust);
+        return trust;
+        
     }
 
     private int rightTrust() {
-        return calcTrust(confidenceRF, confidenceRR);
-    }
+        int trust = calcTrust(confidenceRF, confidenceRR);
+        System.out.println("Right trust:" + trust);
+        return trust;    }
 
     private boolean isCloseToWall(double distance) {
         if ((Math.abs(distance) < wallNear)) {
@@ -372,14 +430,36 @@ public class IRDaemon {
             return true;
         }
     }
-    
-    public boolean isCloseEnough(double confidence1, double confidence2){
+
+    public boolean isCloseEnough(double confidence1, double confidence2) {
         double diff = Math.abs(confidence1 - confidence2);
-        if (diff < confidenceThresh)
-        {
+        if (diff < confidenceThresh) {
             return true;
+        } else {
+            return false;
         }
-        else return false;
+    }
+
+    public void leftTurn(double set_distance) {
+        System.out.println("Turning left, set distance: " + set_distance + ", flipping to " + -set_distance);
+        set_distance = -set_distance;
+        System.out.println("recents: " + recentDists);
+        System.out.println("averages: " + avgDist);
+        System.out.println("storing left value:" );
+        storeTheta(thetaLeft);
+        System.out.println("recents: " + recentDists);
+        System.out.println("averages: " + avgDist);
+        storeDistance(-distanceAvgL);
+        storeTarget(calcIdealTheta(set_distance, avgDist));
+        turnSuggest = calcTurn(avgTarget, avgTheta);
+    }
+
+    public void rightTurn(double set_distance) {
+                System.out.println("Turning right, set distance: " + set_distance);
+        storeTheta(thetaRight);
+        storeDistance(distanceAvgR);
+        storeTarget(calcIdealTheta(set_distance, avgDist));
+        turnSuggest = calcTurn(avgTarget, avgTheta);
     }
 
     public String pickDirection() {
@@ -389,127 +469,86 @@ public class IRDaemon {
         double distance;
         double distance_diff = 0.0;
         int L = leftTrust();
-        System.out.println("Left trust: " + L);
         int R = rightTrust();
-        System.out.println("Right trust: " + R);
         if (L == 0 && R == 0) {
-            //turnSuggest = calcTurn(avgTarget, avgTheta);
             return "unknown";
-        } 
-        else if (L > R) {
-            storeTheta(thetaLeft);
-            storeDistance(-distanceAvgL);
-                        if (R == 0){
-            storeTarget(calcIdealTheta(-closeDistance, avgDist));
-            }
-            else {
-            storeTarget(calcIdealTheta(-idealDistance, avgDist));
-            }
-            turnSuggest = calcTurn(avgTarget, avgTheta);
-            return "trust left";
-        } else if ( R > L) {
-            storeTheta(thetaRight);
-            storeDistance(distanceAvgR);
-            if (L == 0){
-            storeTarget(calcIdealTheta(closeDistance, avgDist));
-            }
-            else {
-            storeTarget(calcIdealTheta(idealDistance, avgDist));
-            }
-            turnSuggest = calcTurn(avgTarget, avgTheta);
-            return "trust right";
-        } else if (L == 0 && R == 0)
-        {
-            //turnSuggest = calcTurn(avgTarget, avgTheta);
-            return "unknown";
-        }
-        else {
-            if (confidenceAvgL > confidenceAvgR || isCloseEnough(confidenceAvgL, confidenceAvgR)){
-                storeTheta(thetaLeft);
-                storeDistance(-distanceAvgR);
-                storeTarget(calcIdealTheta(-idealDistance, avgDist));
-                turnSuggest = calcTurn(avgTarget, avgTheta);
-                return "equal trust, use left";
-            }
-            else {
-            storeTheta(thetaRight);
-            storeDistance(distanceAvgR);
-            storeTarget(calcIdealTheta(idealDistance, avgDist));
-            turnSuggest = calcTurn(avgTarget, avgTheta);
-            return "equal trust, use right";
-            }
-                
-        }
-    }
-
-        
-        /*
-        if ((L - R) >= 2) {
-            storeTheta(thetaLeft);
-            storeDistance(-distanceAvgL);
-            storeTarget(calcIdealTheta(-idealDistance, avgDist));
-            turnSuggest = calcTurn(avgTarget, avgTheta);
-            return "trust left";
-        } else if ((R - L) >= 2) {
-            storeTheta(thetaRight);
-            storeDistance(distanceAvgR);
-            storeTarget(calcIdealTheta(idealDistance, avgDist));
-            turnSuggest = calcTurn(avgTarget, avgTheta);
-            return "trust right";
-        } else if (R == 0 && L >= 1) {
-            //return "slight-left";
-            storeTheta(thetaLeft);
-            storeDistance(-distanceAvgL);
-            storeTarget(calcIdealTheta(-closeDistance, avgDist));
-            turnSuggest = calcTurn(avgTarget, avgTheta);
-            return "trust left";
-
-        } else if (L == 0 && R >= 1) {
-            //return "slight-right";
-            storeTheta(thetaRight);
-            storeDistance(distanceAvgR);
-            storeTarget(calcIdealTheta(closeDistance, avgDist));
-            turnSuggest = calcTurn(avgTarget, avgTheta);
-            return "trust right";
-
-        } else if (Math.abs(L - R) < 2) {
-            storeTheta((thetaRight + thetaLeft) / 2);
-            if (confidenceAvgL > confidenceAvgR) {
-                storeDistance(-distanceAvgL);
-                storeTarget(calcIdealTheta(-idealDistance, avgDist));
-                turnSuggest = calcTurn(avgTarget, avgTheta);
-                return "Trusting both, left wall closer";
+        } else if (L > R) {      
+            isLeftPreferred = true;
+             if (R == 0) {
+                leftTurn(closeDistance);
             } else {
-                storeDistance(distanceAvgR);
-                storeTarget(calcIdealTheta(idealDistance, avgDist));
-                turnSuggest = calcTurn(avgTarget, avgTheta);
-                return "Trusting both, right wall closer";
+                leftTurn(idealDistance);
             }
-        } else {
-            turnSuggest = calcTurn(avgTarget, avgTheta);
+            return "trust left";
+        } else if (R > L) {
+            isLeftPreferred = false;
+             if (L == 0) {
+                rightTurn(closeDistance);
+            } else {
+                rightTurn(idealDistance);
+            }
+            return "trust right";
+        } else if (L == 0 && R == 0) {
             return "unknown";
+        } else {
+            if (L >= 2 && R >= 2) {
+                if (dynamicHallwaySize) {
+                    storeHall(calcHall(distanceAvgL, distanceAvgR));
+                }
+            }
+            if (isLeftPreferred == true) {
+                leftTurn(idealDistance);
+                return "left preferred";
+            } else {
+                rightTurn(idealDistance);
+            }
+            return "right preferred";
         }
-    }*/
-    private boolean isTooBig(double theta_rad){
-        theta_rad = toDegrees(theta_rad);
-        if (theta_rad > maxConfidenceAngle){
+    }
+
+    private boolean isTooBig(double theta_rad) {
+        double theta_deg = toDegrees(theta_rad);
+        if (theta_deg > maxConfidenceAngle || theta_deg < -maxConfidenceAngle) {
             return true;
-        }
-        else
+        } else {
             return false;
-    
+        }
+
     }
     
-    private boolean isTooFarOff(double theta_rad){
-        theta_rad = toDegrees(theta_rad);
-        if (Math.abs(theta_rad - avgTheta) > 40)
-        {
+    private boolean isWayTooBig(double theta_rad){
+        double theta_deg = toDegrees(theta_rad);
+        if (theta_deg > maxConfidenceAngle + 15 || theta_deg < -maxConfidenceAngle - 15){
             return true;
         }
-        else 
-            return false;
+        else return false;
     }
     
+    private boolean isTooDifferent(double currentValue, double[] recentValues) {
+        double sd = stDev(recentValues);
+        if (sd == 0){
+            sd = average(recentValues) / 4; // in case the arrays have dummy values!
+        }
+
+        if (currentValue > (average(recentValues) + sd * 2) || currentValue < (average(recentValues) - sd * 2)) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private void ruinLeftConfidence() {
+        confidenceAvgL = 0.0;
+        confidenceLF = 0.0;
+        confidenceLR = 0.0;
+    }
+
+    private void ruinRightConfidence() {
+        confidenceAvgR = 0.0;
+        confidenceRF = 0.0;
+        confidenceRR = 0.0;
+    }
+
     private void updateConfidence() {
         confidenceLF = calcConfidence(readingLF);
         confidenceLR = calcConfidence(readingLR);
@@ -517,38 +556,31 @@ public class IRDaemon {
         confidenceRR = calcConfidence(readingRR);
         confidenceAvgL = (confidenceLF + confidenceLR) / 2;
         confidenceAvgR = (confidenceRF + confidenceRR) / 2;
-        if (isTooBig(thetaRight))
-        {
-            confidenceAvgR = 0.0;
-            confidenceRF = 0.0;
-            confidenceRR = 0.0;
-        }
-        else if (isTooBig(thetaLeft)){
-            confidenceAvgL = 0.0;
-            confidenceLF = 0.0;
-            confidenceLR = 0.0;
-        }
-        /*else {
+        double newHallSize = calcHall(distanceAvgL, distanceAvgR);
+        //if (isTooDifferent(newHallSize, recentHalls)) {
+        //    System.out.println("Hall size change detected! Expect " + avgHall + ", saw " + newHallSize);
+        /*    if (isTooDifferent(thetaLeft, recentThetas) && !isTooDifferent(thetaRight, recentThetas)) {
+                System.out.println("ThetaLeft ("+thetaLeft+") different from avgTheta("+avgTheta+")");
+                ruinLeftConfidence();
+            }
+         else {
+            if (isTooDifferent(thetaRight, recentThetas) && !isTooDifferent(thetaLeft, recentThetas)) {
+                System.out.println("ThetaRight ("+thetaRight+") different from avgTheta("+avgTheta+")");
 
-        if (confidenceAvgL > confidenceAvgR && isTooFarOff(thetaRight)){
-            confidenceAvgR = 0.0;
-            confidenceRF = 0.0;
-            confidenceRR = 0.0;
+                ruinRightConfidence();
+            }
         }
-        else if (!isTooFarOff(thetaRight) && confidenceAvgR > confidenceAvgL){
-            confidenceAvgL = 0.0;
-            confidenceLF = 0.0;
-            confidenceLR = 0.0;
+        */
+        if (isTooBig(thetaLeft) && !isTooBig(thetaRight) || isWayTooBig(thetaLeft)) {
+            System.out.println("thetaLeft too big, thetaRight might be OK: " + toDegrees(thetaLeft) + " vs. " + maxConfidenceAngle);
+            ruinLeftConfidence();
+        } else if (isTooBig(thetaRight) && !isTooBig(thetaLeft) || isWayTooBig(thetaRight)) {
+            System.out.println("ThetaRight too big, thetaLeft might be OK"  + toDegrees(thetaRight) + " vs. " + maxConfidenceAngle);
+            ruinRightConfidence();
         }
-    }*/
-        
+    //}
     }
-        // sanity check
 
-    /*private double calcConfidence(double reading) {
-     double new_confidence = (confidenceDistance / reading);
-     return new_confidence * new_confidence; // Where the Hell is our Math.pow(double, int)?
-     }*/
     private double calcConfidence(double reading) {
         return confidenceDistance / reading;
     }
