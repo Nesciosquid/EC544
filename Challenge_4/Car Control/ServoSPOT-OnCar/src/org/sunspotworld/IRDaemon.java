@@ -85,16 +85,21 @@ public class IRDaemon {
         double diff = 0.0;
         double sum = 0.0;
         double sdSum = 0.0;
-        double avg = 0.0;
-        for (int i = 0; i < data.length; i++) {
-            sum += data[i];
-        }
-        avg = sum / data.length;
+        double avg = average(data);
         for (int i = 0; i < data.length; i++) {
             diff += (data[i] - avg);
             sdSum += (diff * diff);
         }
         return (Math.sqrt(sdSum / data.length));
+    }
+    
+    private double average(double[] data){
+        double sum = 0.0;
+        for (int i = 0; i < data.length; i++){
+            sum += data[i];
+        }
+                    return sum/data.length;
+
     }
 
     public double toRadians(double theta_deg) {
@@ -495,7 +500,7 @@ public class IRDaemon {
 
     private boolean isTooBig(double theta_rad) {
         theta_rad = toDegrees(theta_rad);
-        if (theta_rad > maxConfidenceAngle) {
+        if (theta_rad > maxConfidenceAngle || theta_rad < -maxConfidenceAngle) {
             return true;
         } else {
             return false;
@@ -503,9 +508,10 @@ public class IRDaemon {
 
     }
 
-    private boolean isTooDifferent(double theta_rad) {
-        theta_rad = toDegrees(theta_rad);
-        if (theta_rad > avgTheta + stDev(recentThetas) * 2 || theta_rad < avgTheta - stDev(recentThetas) * 2) {
+    private boolean isTooDifferent(double currentValue, double[] recentValues) {
+        double sd = stDev(recentValues);
+        
+        if (currentValue > (average(recentValues) + sd * 2) || currentValue < (average(recentValues) - sd * 2)) {
             return true;
         } else {
             return false;
@@ -532,12 +538,12 @@ public class IRDaemon {
         confidenceAvgL = (confidenceLF + confidenceLR) / 2;
         confidenceAvgR = (confidenceRF + confidenceRR) / 2;
         double newHallSize = calcHall(distanceAvgL, distanceAvgR);
-        if (newHallSize > (avgHall + stDev(recentHalls) * 2)) { // 
-            if (isTooDifferent(thetaLeft) && !isTooDifferent(thetaRight)) { 
+        if (isTooDifferent(newHallSize, recentHalls)){
+            if (isTooDifferent(thetaLeft, recentThetas) && !isTooDifferent(thetaRight, recentThetas)) { 
                 ruinLeftConfidence();
             }
         } else {
-            if (isTooDifferent(thetaRight) && !isTooDifferent(thetaLeft)) {
+            if (isTooDifferent(thetaRight, recentThetas) && !isTooDifferent(thetaLeft, recentThetas)) {
                 ruinRightConfidence();
             }
         }
@@ -547,13 +553,7 @@ public class IRDaemon {
             ruinRightConfidence();
         }
     }
-
-    // sanity check
-
-    /*private double calcConfidence(double reading) {
-     double new_confidence = (confidenceDistance / reading);
-     return new_confidence * new_confidence; // Where the Hell is our Math.pow(double, int)?
-     }*/
+    
     private double calcConfidence(double reading) {
         return confidenceDistance / reading;
     }
