@@ -229,7 +229,8 @@ public class ServoSPOTonCar extends MIDlet implements ISwitchListener {
             drive();}
             /*} else {
              velocityBlinker.setColor(LEDColor.RED);
-             progBlinker.setColor(LEDColor.RED);
+             progBlinker.set
+             Color(LEDColor.RED);
              error = true;
              }*/
             Utils.sleep(SAMPLE_TIME);
