@@ -8,7 +8,7 @@ package org.sunspotworld;
 
 import com.sun.spot.peripheral.radio.RadioFactory;
 import com.sun.spot.resources.Resources;
-//import com.sun.spot.resources.transducers.IIOPin;
+import com.sun.spot.resources.transducers.IIOPin;
 import com.sun.spot.resources.transducers.IAnalogInput;
 //import com.sun.spot.sensorboard.io.AnalogInput;
 import com.sun.spot.sensorboard.EDemoBoard;
@@ -49,13 +49,12 @@ import javax.microedition.io.StreamConnection;
 
 public class URange extends MIDlet {
 
+    private IInputPin rxPin = EDemoBoard.getInstance().getIOPins()[EDemoBoard.D0];
+    private IInputPin txPin = EDemoBoard.getInstance().getIOPins()[EDemoBoard.D1];
+    
     protected void startApp() throws MIDletStateChangeException {
         System.out.println("Ultrasonic MaxSonar in action...");
         BootloaderListenerService.getInstance().start();   // monitor the USB (if connected) and recognize commands from host
-
-    private void run()throws IOException {
-        byteUartCommunication();
-    }
     
     private void byteUartCommunication(){
         EDemoBoard.getInstance().initUART(9600, false);
@@ -71,6 +70,7 @@ public class URange extends MIDlet {
         }
     }
     
+    // "this is untested, should work with the Purple API" according to the source I cribbed this from
     private void streamUartCommunication() throws IOException {
         InputStream is= Connector.openInputStream("edemoserial://usart?baudrate=9600");
         byte[]buffer= new byte[256];
@@ -80,6 +80,10 @@ public class URange extends MIDlet {
         }
     }
     
+    private void run()throws IOException {
+        streamUartCommunication();
+        byteUartCommunication();
+    }
         //IAnalogInput sensor = EDemoBoard.getInstance().getAnalogInputs()[EDemoBoard.A0];
         
    while(true){
@@ -90,7 +94,7 @@ public class URange extends MIDlet {
              * if the notebook is tilted then the range finder cannot see it and detects 
              * infinite distance. With a person or other round object, there will always
              * be some reflection back to the sensor so this problem is avoided.
-             * -Erik
+             * 
              */
             
             // Analog usage:
@@ -104,7 +108,7 @@ public class URange extends MIDlet {
             // End of Analog usage code.
             
             // Serial usage: tie BW pin low
-            
+            run();
             // End of Serial usage code.
             } catch (IOException ex){
                 ex.printStackTrace();
