@@ -36,6 +36,7 @@ public void setup(){
   new_target = (hall_left + hall_right / 2);
   min_target = hall_left + a.totalWidth;
   max_target = hall_right - a.totalWidth;
+  a.setConfidenceDistance(((hall_right) - (hall_left))/5);
   b = new Floor();
   frameRate(30);
 }
@@ -109,6 +110,7 @@ b.display();
     a.updateTheta();
     a.updatePosition();
     a.setVelocity(velocity);
+    a.calcReads(hall_left, hall_right);
     a.display();
     
     readouts[0] = "Car Position: " + a.xpos;
@@ -151,10 +153,8 @@ class Floor{
   
   Floor(){
             horizontalRules = (floorHeight / ydist);
-      System.out.println("Horizontal rules: " + horizontalRules);
 
       verticalRules = (floorWidth / xdist);
-            System.out.println("Vertical rules: " + verticalRules);
   }
   
     float getTheta(){
@@ -285,7 +285,45 @@ class IRSensor{
     
 }
 
+class WheelStripe{
+  float stripeWidth;
+  float stripeLength;
+  float xpos;
+  float ypos;
+  float stripeWeight = 2;
+  int stripeStroke = color(60);
+  
+  WheelStripe(float newX, float newY, float newWidth, float newLength){
+    xpos = newX;
+    ypos = newY;
+    stripeWidth = newWidth;
+    stripeLength = newLength;
+}
+
+  public void move(float velocity, float maxY, float minY){
+    float max = maxY - stripeWeight;
+    float min = minY + stripeWeight;
+    ypos = ypos - velocity/5;
+    if (ypos > max){
+      ypos = min;
+    }
+    else if (ypos < min){
+      ypos = max;
+  }
+  }
+  
+  public void display(){
+    stroke(stripeStroke);
+    strokeWeight(stripeWeight);
+    line(xpos-stripeWidth/2, ypos, xpos+stripeWidth/2, ypos);
+    stroke(0);
+    strokeWeight(1);
+}
+}
+  
 class Wheel{
+  WheelStripe[] stripes;
+  float velocity = 10;
   float xpos;
   float ypos;
   float centerTurn = 1500;
@@ -294,6 +332,7 @@ class Wheel{
   float wheelLength = 30.0f;
   float wheelWidth = 20.0f;
   float maxTheta = radians(30.0f);
+  float wheelWeight = 2;
   int wheelColor = color(150);
   int wheelStroke = color(0);
   
@@ -301,8 +340,33 @@ class Wheel{
     xpos = newX;
     ypos = newY;
     updateTheta();
+    //stripes[0] = new WheelStripe(xpos, ypos, wheelWidth, wheelLength);
+    initStripes();
   }
   
+  void setVelocity(float newVel){
+      velocity = newVel;
+  }
+  
+  int calcStripes(){
+    return (int)Math.floor(wheelLength/(wheelWeight * 6));
+  }
+  
+  void initStripes(){
+    stripes = new WheelStripe[calcStripes()];
+    float yStart = 0 - (wheelLength/2) + wheelWeight + 1;
+    for (int i = 0; i < stripes.length; i++){
+      stripes[i] = new WheelStripe(0, (yStart + (wheelWeight *7) * i), wheelWidth-1, wheelLength-1);
+    }
+  }
+  
+  void moveStripes(){
+    for (int i = 0; i < stripes.length; i++){
+      stripes[i].move(velocity, 0+wheelLength/2, 0-wheelLength/2);
+      stripes[i].display();
+    }
+  }
+    
   float getTurn(){
     return turnAmount;
   }
@@ -330,24 +394,33 @@ class Wheel{
   }
   
   void display(){
+    
     rectMode(CENTER);
-    strokeWeight(2);
-    stroke(wheelStroke);
+    noStroke();
     fill(wheelColor);
     rect(0,0,wheelWidth, wheelLength,5,5,5,5);
+    moveStripes();
+    noFill();
+    strokeWeight(wheelWeight);
+    stroke(wheelStroke);
+    rect(0,0,wheelWidth, wheelLength,5,5,5,5);
     strokeWeight(1);
+    stroke(0);
+    
   }
 }
   
 class Car{
-  
+    
+  float confidence_distance = 200.0f;
+  float[] reads =  new float[4];
+  int[] trusts = new int[4];
   float velocity = 15.0f;
   float targetX = 400.0f;
   float leftWallDistance = -20.0f;
   float rightWallDistance = 20.0f;
   Wheel[] wheels = new Wheel[4];
   IRSensor[] sensors = new IRSensor[4];
-  double[] reads = new double[4];
   float theta = radians(0);
   float xpos;
   float ypos;
@@ -377,6 +450,10 @@ class Car{
       
     }
     
+    void setConfidenceDistance(float conf){
+        confidence_distance = conf;
+    }
+    
     void setTarget(float x){
       targetX = x;
     }
@@ -387,10 +464,58 @@ class Car{
     
     void setVelocity(float new_vel){
       velocity = new_vel;
+      for (int i = 0; i < wheels.length; i ++){
+          wheels[i].setVelocity(new_vel);
+      }
     }
+    
+    
+public float frontCenterX(){
+    float tangent = topLength/2;
+    float dx = sin(theta)*tangent;
+    float newx = xpos + dx;
+    return newx;
+}
+
+public float frontCenterY(){
+    float tangent = topLength/2;
+    float dy = cos(theta)*tangent;
+    float newy = ypos - dy;
+    return newy;
+}
+
+public void markMidFront(){
+    stroke(100,200,200);
+    noFill();
+    strokeWeight(4);
+    ellipseMode(CENTER);
+    ellipse(frontCenterX(), frontCenterY(), 15, 15);
+}
+
+public void markMidBack(){
+    stroke(100,200,200);
+    noFill();
+    strokeWeight(4);
+    ellipseMode(CENTER);
+    ellipse(backCenterX(), backCenterY(), 15, 15);
+}
+
+public float backCenterX(){
+    float tangent = topLength/2;
+    float dx = sin(theta)*tangent;
+    float newx = xpos - dx;
+    return newx;
+}
+
+public float backCenterY(){
+    float tangent = topLength/2;
+    float dy = cos(theta)*tangent;
+    float newy = ypos + dy;
+    return newy;
+}
 
 public int calcTrust(float value){
-    float ratio = Math.abs(value)/200;
+    float ratio = confidence_distance/Math.abs(value);
     if (ratio > 1.0)
             return 4;
     else if (ratio > .75)
@@ -495,13 +620,34 @@ public int calcTrust(float value){
       }
     }
     
+    void calcReads(float leftHall, float rightHall){
+        reads[0] = calcRead(frontCenterX(), leftHall, theta, topWidth/2);
+        reads[1] = calcRead(frontCenterX(), rightHall, theta, topWidth/2);
+        reads[2] = calcRead(backCenterX(), leftHall, theta, topWidth/2);
+        reads[3] = calcRead(backCenterX(), rightHall, theta, topWidth/2);
+        calcTrusts();
+    }
+    
+    void calcTrusts(){
+        trusts[0] = calcTrust(reads[0]);
+        trusts[1] = calcTrust(reads[1]);
+        trusts[2] = calcTrust(reads[2]);
+        trusts[3] = calcTrust(reads[3]);
+    }
+    
+    
+    float calcRead(float startx, float endx, float theta, float offset){
+        float readLength = abs((startx - endx)) / cos(theta);
+        return (readLength) - offset;
+    }
+    
     void drawSensors(){
       for (int i = 0; i < sensors.length; i++){
         IRSensor currentSensor = sensors[i];
         pushMatrix();
         translate(currentSensor.getX(), currentSensor.getY());
         rotate(currentSensor.getTheta());
-        currentSensor.shootBeam(400,4-i);
+        currentSensor.shootBeam(reads[i], trusts[i]);
         currentSensor.display();
         
         popMatrix();
@@ -510,6 +656,7 @@ public int calcTrust(float value){
       
     
     void display(){
+      
       pushMatrix();
       translate(xpos, ypos);
       rotate(theta);
