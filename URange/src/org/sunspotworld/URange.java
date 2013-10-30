@@ -61,20 +61,24 @@ public class URange extends MIDlet {
     protected void startApp() throws MIDletStateChangeException {
         System.out.println("Ultrasonic MaxSonar in action...");
         BootloaderListenerService.getInstance().start();   // monitor the USB (if connected) and recognize commands from host
-        demoBoard.initUART(9600, false);
+        demoBoard.initUART(9600, true);
         while(true){
+            
             System.out.println("In while loop");
             String returnString = "";
             byte[] buffer = new byte[64];
             
             try{
-                if (demoBoard.availableUART()>1){
-                demoBoard.readUART(buffer, 0, buffer.length);
-                returnString = returnString + new String(buffer, "US-ASCII").trim();
-                System.out.println(returnString);
-                System.out.println("Finished getting string");
+                System.out.println("Trying to read:");
+                if (demoBoard.availableUART()>0){
+                    System.out.println("UART available.");
+                    demoBoard.readUART(buffer, 0, buffer.length);
+                    returnString = returnString + new String(buffer, "US-ASCII").trim();
+                    System.out.println(returnString);
+                    System.out.println("Finished getting string");
                 }
-            } catch(IOException e) {
+            } 
+            catch(IOException e) {
                 if(e.getMessage().equals("empty uart buffer"))
                     Utils.sleep(100);
                 else
@@ -84,7 +88,6 @@ public class URange extends MIDlet {
                 Thread.sleep(1000);
             }
             catch (InterruptedException ie){
-            
             }
         }
     }
