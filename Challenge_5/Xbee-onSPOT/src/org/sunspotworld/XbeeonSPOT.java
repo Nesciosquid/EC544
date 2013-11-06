@@ -29,60 +29,57 @@ import javax.microedition.midlet.MIDletStateChangeException;
  *
  * @author Yuting Zhang <ytzhang@bu.edu>
  */
+class Beacon {
 
-class Beacon{
     String name = "";
     float RSSI = 0.0f;
     float xPos = 0.0f;
     float yPos = 0.0f;
     byte[] address;
-    
-    public Beacon(String newName, byte[] newAddress, float newX, float newY){
+
+    public Beacon(String newName, byte[] newAddress, float newX, float newY) {
         name = newName;
         xPos = newX;
         yPos = newY;
         address = newAddress;
     }
-    
-        public Beacon(String newName, byte[] newAddress){
+
+    public Beacon(String newName, byte[] newAddress) {
         name = newName;
         address = newAddress;
     }
-    
-    public void setRSSI(float newRSSI){
+
+    public void setRSSI(float newRSSI) {
         RSSI = newRSSI;
     }
-    
-    public float getRSSI(){
+
+    public float getRSSI() {
         return RSSI;
     }
-    
-    public void setPosition(float newX, float newY){
+
+    public void setPosition(float newX, float newY) {
         xPos = newX;
         yPos = newY;
     }
-    
-    public String getName(){
+
+    public String getName() {
         return name;
     }
-    
-    public byte[] getAddress(){
+
+    public byte[] getAddress() {
         return address;
     }
 }
 
 public class XbeeonSPOT extends MIDlet {
-    
+
     private static final int HOST_PORT = 99;
     private static final int SAMPLE_PERIOD = 200;  // in milliseconds
-
     private byte[] routerAddressA = {(byte) 0x00, (byte) 0x13, (byte) 0xa2, (byte) 0x00, (byte) 0x40, (byte) 0xa1, (byte) 0xa1, (byte) 0x83};
     private byte[] routerAddressB = {(byte) 0x00, (byte) 0x13, (byte) 0xa2, (byte) 0x00, (byte) 0x40, (byte) 0xa1, (byte) 0xa1, (byte) 0x47};
     private byte[] routerAddressC = {(byte) 0x00, (byte) 0x13, (byte) 0xa2, (byte) 0x00, (byte) 0x40, (byte) 0xa1, (byte) 0xa1, (byte) 0x53};
     private byte[] routerAddressD = {(byte) 0x00, (byte) 0x13, (byte) 0xa2, (byte) 0x00, (byte) 0x40, (byte) 0x91, (byte) 0xBC, (byte) 0x5C};
-    
-    private Beacon[] beacons ={new Beacon("A", routerAddressA), new Beacon("C", routerAddressC)};
-
+    private Beacon[] beacons = {new Beacon("A", routerAddressA), new Beacon("C", routerAddressC)};
     private ITriColorLEDArray leds = (ITriColorLEDArray) Resources.lookup(ITriColorLEDArray.class);
     private EDemoBoard eDemo = EDemoBoard.getInstance();
     private ILightSensor light = (ILightSensor) Resources.lookup(ILightSensor.class);
@@ -117,9 +114,9 @@ public class XbeeonSPOT extends MIDlet {
     }
 
     public void getRemoteRSSI(byte[] address, String beaconName) {
-        //System.out.println("Clearing " + beaconName);
+        System.out.println("Clearing UART...");
         clearUART();
-        //System.out.println("Pinging " + beaconName);
+        System.out.println("Pinging " + beaconName);
         pingRSSI(address);
         try {
             Utils.sleep(100);
@@ -129,22 +126,22 @@ public class XbeeonSPOT extends MIDlet {
         //System.out.println("Reading " + beaconName);
         getResponse(beaconName);
     }
-    
-    public void getBeaconRSSI(Beacon targetBeacon, Datagram datag, RadiogramConnection rc){
+
+    public void getBeaconRSSI(Beacon targetBeacon, Datagram datag, RadiogramConnection rc) {
         clearUART();
         pingRSSI(targetBeacon.getAddress());
         try {
-            Utils.sleep(100);
+            Utils.sleep(50);
         } catch (Exception e) {
             System.out.println(e);
         }
-        if (getResponse(targetBeacon.name)){
+        if (getResponse(targetBeacon)) {
             sendRead(datag, rc, targetBeacon.getName(), targetBeacon.getRSSI());
         }
     }
-    
-    public void getLocalRSSI(){
-         //byte[] addressBytes = address.getBytes();
+
+    public void getLocalRSSI() {
+        //byte[] addressBytes = address.getBytes();
         byte[] snd = new byte[9];
         snd[0] = (byte) 0x7E;    //start of api 
         snd[1] = (byte) 0x00;    //msb of length
@@ -158,7 +155,7 @@ public class XbeeonSPOT extends MIDlet {
         eDemo.writeUART(snd);
     }
 
-    public boolean getResponse(String beaconName) {
+    public void getResponse(String beaconName) {
         try {
             if (eDemo.availableUART() == 20) {
                 eDemo.readUART(buffer, 0, buffer.length);
@@ -168,78 +165,82 @@ public class XbeeonSPOT extends MIDlet {
 
                 //System.out.println(returnString);
                 //System.out.println(moteName + ": " + bytesToHexString(buffer, true));
-                int DB = buffer[19]&0xFF;
+                int DB = buffer[19] & 0xFF;
                 //System.out.println("DB (Hex): " + dbHex);
                 System.out.println(beaconName + " [19]: " + DB);
-                return true;
             } else if (eDemo.availableUART() >= 1) {
-             System.out.println("Response is wrong size!");
-             }
+                System.out.println("Response is wrong size!");
+                eDemo.readUART(buffer, 0, buffer.length);
+                System.out.println(beaconName + ": " + bytesToHexString(buffer, true));
+
+            }
+            else {
+                System.out.println("Buffer is empty!?");
+            }
         } catch (IOException ex) {
             ex.printStackTrace();
         }
-        return false;
     }
-    
-    public boolean getResponse(Beacon targetBeacon){
+
+    public boolean getResponse(Beacon targetBeacon) {
         try {
             if (eDemo.availableUART() == 20) {
                 eDemo.readUART(buffer, 0, buffer.length);
-                int DB = buffer[19]&0xFF;
+                int DB = buffer[19] & 0xFF;
                 System.out.println(targetBeacon.getName() + " [19]: " + DB);
-                targetBeacon.setRSSI((float)DB);
+                targetBeacon.setRSSI((float) DB);
                 return true;
             } else if (eDemo.availableUART() >= 1) {
-             System.out.println("Response is wrong size!");
-
-             }
+                eDemo.readUART(buffer, 0, buffer.length);
+                System.out.println("Response is wrong size!");
+                System.out.println(targetBeacon.getName() + ": " + bytesToHexString(buffer, true));
+            }
         } catch (IOException ex) {
             ex.printStackTrace();
         }
         return false;
     }
-    
-    private void sendRead(Datagram datag, RadiogramConnection rc, String beaconName, float beaconRead){
-        try{
+
+    private void sendRead(Datagram datag, RadiogramConnection rc, String beaconName, float beaconRead) {
+        try {
+            datag = rc.newDatagram(50); 
             datag.writeUTF("RSSI");
             datag.writeUTF(beaconName);
             datag.writeFloat(beaconRead);
             rc.send(datag);
             Thread.sleep(50);
-            }
-            catch (Exception e){
-                System.out.println(e);
-            }
-    }
-    
-    /*private void sendReads(Datagram datag, RadiogramConnection rc){
-        for (int i = 0; i < reads.length; i ++){
-            datag.reset();
-            try{
-            datag.writeFloat(reads[i]);
-            rc.send(datag);
-            Thread.sleep(50);
-            }
-            catch (Exception e){
-                System.out.println(e);
-            }
-            System.out.println("Sent read [" + i + "]: " + reads[i]);
+        } catch (Exception e) {
+            System.out.println(e);
         }
-    }*/
+    }
 
+    /*private void sendReads(Datagram datag, RadiogramConnection rc){
+     for (int i = 0; i < reads.length; i ++){
+     datag.reset();
+     try{
+     datag.writeFloat(reads[i]);
+     rc.send(datag);
+     Thread.sleep(50);
+     }
+     catch (Exception e){
+     System.out.println(e);
+     }
+     System.out.println("Sent read [" + i + "]: " + reads[i]);
+     }
+     }*/
     protected void startApp() throws MIDletStateChangeException {
         System.out.println("Starting LPS system.");
         BootloaderListenerService.getInstance().start();   // monitor the USB (if connected) and recognize commands from host
         long ourAddr = RadioFactory.getRadioPolicyManager().getIEEEAddress();
         System.out.println("Our radio address = " + IEEEAddress.toDottedHex(ourAddr));
-        
+
         RadiogramConnection rCon = null;
         Datagram dg = null;
-        
-                try {
+
+        try {
             // Open up a broadcast connection to the host port
             rCon = (RadiogramConnection) Connector.open("radiogram://broadcast:" + HOST_PORT);
-            dg = rCon.newDatagram(50);  // only sending 12 bytes of data
+            dg = rCon.newDatagram(100);  // only sending 12 bytes of data
         } catch (Exception e) {
             System.err.println("Caught " + e + " in connection initialization.");
         }
@@ -254,10 +255,9 @@ public class XbeeonSPOT extends MIDlet {
                 //pingRSSI(routerAddressA);
                 //getRemoteRSSI(routerAddressA, "A");
                 //getRemoteRSSI(routerAddressB, "B");
-                //getRemoteRSSI(routerAddressC, "C");
-                //getRSSI(routerAddressD, "D");
-                for (int i = 0; i < beacons.length; i ++){
+                for (int i = 0; i < beacons.length; i++) {
                     getBeaconRSSI(beacons[i], dg, rCon);
+                    //getRemoteRSSI(beacons[i].getAddress(), beacons[i].getName());
                 }
             }
             Utils.sleep(500);
