@@ -1,4 +1,6 @@
-<?xml version="1.0" encoding="UTF-8" standalone="no"?><project basedir="." default="help" name="ServoSPOT-OnCar">
+<?xml version="1.0" encoding="UTF-8"?>
+
+	<project name="ServoSPOT-OnCar" basedir="." default="host-run">
 
 <!-- You may freely edit this file. See commented blocks below for -->
 <!-- some examples of how to customize the build. -->
@@ -22,7 +24,6 @@
     explanations, see the file ${sunspot.home}/default.properties.
 
     -->
-
     <property name="user.properties.file" value="build.properties"/>
     <property file="${user.home}/.sunspot.properties"/>
     <import file="${sunspot.home}/build.xml"/>
@@ -97,14 +98,5 @@
     Note: you must manually edit the packagenames argument with
           the packages that you wish to create Javadoc for.
     -->
-
-    <target depends="init" name="javadoc">
-        <delete dir="doc"/>
-        <mkdir dir="doc"/>
-        <javadoc author="true" destdir="doc" doctitle="My Project -- SPOT-side (Version 1.0)" packagenames="org.sunspotworld.demo" sourcepath="src" windowtitle="My Project -- SPOT-side v1.0">
-	    <classpath path="${sunspot.classpath}:${sunspot.bootclasspath}"/>
-            <header><![CDATA[<b>My Project -- SPOT-side<br>v1.0</b>]]></header>
-        </javadoc>
-    </target>
 
 </project>
