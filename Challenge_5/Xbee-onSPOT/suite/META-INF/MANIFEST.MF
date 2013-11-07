@@ -1,5 +1,5 @@
 Manifest-Version: 1.0
-Ant-Version: Apache Ant 1.9.2
+Ant-Version: Apache Ant 1.8.4
 Created-By: 1.7.0_25-b17 (Oracle Corporation)
 MIDlet-Name: Xbee-onSPOT
 MIDlet-Version: 1.0.0
