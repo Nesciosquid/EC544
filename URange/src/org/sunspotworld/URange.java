@@ -2,99 +2,78 @@
  * URange.java
  *
  * Created on Jul 4, 2012 4:35:45 PM;
- * Modified Oct 29, 2013
  */
 
 package org.sunspotworld;
 
 import com.sun.spot.peripheral.radio.RadioFactory;
 import com.sun.spot.resources.Resources;
-import com.sun.spot.resources.transducers.IInputPin;
-//import com.sun.spot.resources.transducers.IAnalogInput;
+//import com.sun.spot.resources.transducers.IIOPin;
+import com.sun.spot.resources.transducers.IAnalogInput;
 //import com.sun.spot.sensorboard.io.AnalogInput;
+import com.sun.spot.resources.transducers.ISwitch;
+import com.sun.spot.resources.transducers.ITriColorLED;
+import com.sun.spot.resources.transducers.ITriColorLEDArray;
 import com.sun.spot.sensorboard.EDemoBoard;
-import com.sun.spot.sensorboard.io.PinDescriptor;
 import com.sun.spot.service.BootloaderListenerService;
+import com.sun.spot.util.IEEEAddress;
 import com.sun.spot.util.Utils;
 
-import java.util.*;
+import java.io.IOException;
 import javax.microedition.midlet.MIDlet;
 import javax.microedition.midlet.MIDletStateChangeException;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Random;
-
-// Serial communication (RS-232)
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import javax.microedition.io.Connector;
-import javax.microedition.io.StreamConnection;
-
-
 /**
- * Important usage notes:
- * 1) When powering up, keep all objects clear in front of the sensors for at least 
- *  14". They need this clear field of view to calibrate.
- * 2) The code below must be changed to the appropriate Vcc level, 3.3V or 5V.
- * 3) If the car is moved from inside to outside while powered on, cold weather 
- *  will cause reduced up-close sensitivity.
+ * The startApp method of this class is called by the VM to start the
+ * application.
  * 
- * Serial: TX connected to D1, RX connected to D0.
- * @author  Erik Knechtel
+ * The manifest specifies this class as MIDlet-1, which means it will
+ * be selected for execution.
+ * @author  Yuting Zhang <ytzhang@bu.edu>
  */
-
-/* Note that the ultrasonic range finder uses specular reflections,
-* which require that the object it is locating have some part of its surface
-* oriented parallel with the sensor. So testing this with a flat notebook, 
-* if the notebook is tilted then the range finder cannot see it and detects 
-* infinite distance. With a person or other round object, there will always
-* be some reflection back to the sensor so this problem is avoided.
-*/
-
 public class URange extends MIDlet {
 
-    private IInputPin rxPin = EDemoBoard.getInstance().getIOPins()[EDemoBoard.D0];
-    private IInputPin txPin = EDemoBoard.getInstance().getIOPins()[EDemoBoard.D1];
-    private EDemoBoard demoBoard = EDemoBoard.getInstance();
-    
+    private ITriColorLEDArray leds = (ITriColorLEDArray) Resources.lookup(ITriColorLEDArray.class);
+
     protected void startApp() throws MIDletStateChangeException {
-        System.out.println("Ultrasonic MaxSonar in action...");
+        System.out.println("Hello, world");
         BootloaderListenerService.getInstance().start();   // monitor the USB (if connected) and recognize commands from host
-        demoBoard.initUART(9600, true);
-        while(true){
-            
-            System.out.println("In while loop");
-            String returnString = "";
-            byte[] buffer = new byte[64];
-            
-            try{
-                System.out.println("Trying to read:");
-                if (demoBoard.availableUART()>0){
-                    System.out.println("UART available.");
-                    demoBoard.readUART(buffer, 0, buffer.length);
-                    returnString = returnString + new String(buffer, "US-ASCII").trim();
-                    System.out.println(returnString);
-                    System.out.println("Finished getting string");
-                }
-            } 
-            catch(IOException e) {
-                if(e.getMessage().equals("empty uart buffer"))
-                    Utils.sleep(100);
-                else
-                    System.out.println(e);
+
+        long ourAddr = RadioFactory.getRadioPolicyManager().getIEEEAddress();
+        System.out.println("Our radio address = " + IEEEAddress.toDottedHex(ourAddr));
+
+        IAnalogInput sensor = EDemoBoard.getInstance().getAnalogInputs()[EDemoBoard.A0];
+        ISwitch sw1 = (ISwitch) Resources.lookup(ISwitch.class, "SW1");
+        ITriColorLED led = leds.getLED(0);
+        led.setRGB(100,0,0);                    // set color to moderate red
+ //       while (sw1.isOpen()) {
+   while(true){
+        try {
+           //    led.setOn();                        // Blink LED
+           //    Utils.sleep(250);
+                double val = sensor.getVoltage();
+     
+                System.out.println("Value: "+ val);  
+           //     led.setOff();
+                Utils.sleep(1000);
+            } catch (IOException ex){
+                ex.printStackTrace();
             }
-            try{
-                Thread.sleep(1000);
-            }
-            catch (InterruptedException ie){
-            }
+          //  Utils.sleep(100);
+     //       notifyDestroyed();
         }
-    }
-  
+     }
+
     protected void pauseApp() {
+        // This is not currently called by the Squawk VM
     }
 
+    /**
+     * Called if the MIDlet is terminated by the system.
+     * It is not called if MIDlet.notifyDestroyed() was called.
+     *
+     * @param unconditional If true the MIDlet must cleanup and release all resources.
+     */
     protected void destroyApp(boolean unconditional) throws MIDletStateChangeException {
     }
 }
