@@ -3,6 +3,8 @@
  *A combination of the "Discovery" sample project and code written by Aaron 
  * in Processing. 
  * 
+ We implement the Bully algorithm, however we look for lowest ID, rather than highest.
+ 
  * @author Aaron Heuckroth, Erik Knechtel, Abhinav Nair
  *
  * Created on Nov 19, 2013;
