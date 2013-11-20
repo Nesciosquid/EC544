@@ -71,8 +71,8 @@ public class LocalizationViz extends PApplet {
         stroke(0);
         noFill();
         beacons[0] = new Beacon(inset, inset, "C");
-        beacons[1] = new Beacon(innerWidth, inset, "A");
-        beacons[2] = new Beacon(inset, innerWidth+inset/2, "D");
+        beacons[1] = new Beacon(inset+350, inset, "A");
+        //beacons[2] = new Beacon(inset, innerWidth+inset/2, "D");
         //beacons[3] = new Beacon(innerWidth, innerWidth, "D");
     }
 

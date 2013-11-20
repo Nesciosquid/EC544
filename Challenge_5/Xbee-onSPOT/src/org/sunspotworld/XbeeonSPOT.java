@@ -9,6 +9,7 @@ import com.sun.spot.peripheral.radio.RadioFactory;
 import com.sun.spot.sensorboard.EDemoBoard;
 import com.sun.spot.resources.Resources;
 import com.sun.spot.resources.transducers.ISwitch;
+import com.sun.spot.resources.transducers.IOutputPin;
 import com.sun.spot.resources.transducers.ITriColorLED;
 import com.sun.spot.resources.transducers.ITriColorLEDArray;
 import com.sun.spot.resources.transducers.ILightSensor;
@@ -76,21 +77,27 @@ public class XbeeonSPOT extends MIDlet {
     private static final int HOST_PORT = 99;
     private static final int SAMPLE_PERIOD = 200;  // in milliseconds
     private byte[] routerAddressA = {(byte) 0x00, (byte) 0x13, (byte) 0xa2, (byte) 0x00, (byte) 0x40, (byte) 0xa1, (byte) 0xa1, (byte) 0x83};
-    private byte[] routerAddressB = {(byte) 0x00, (byte) 0x13, (byte) 0xa2, (byte) 0x00, (byte) 0x40, (byte) 0xa1, (byte) 0xa1, (byte) 0x47};
+    //private byte[] routerAddressB = {(byte) 0x00, (byte) 0x13, (byte) 0xa2, (byte) 0x00, (byte) 0x40, (byte) 0xa1, (byte) 0xa1, (byte) 0x47};
     private byte[] routerAddressC = {(byte) 0x00, (byte) 0x13, (byte) 0xa2, (byte) 0x00, (byte) 0x40, (byte) 0xa1, (byte) 0xa1, (byte) 0x53};
     private byte[] routerAddressD = {(byte) 0x00, (byte) 0x13, (byte) 0xa2, (byte) 0x00, (byte) 0x40, (byte) 0x91, (byte) 0xBC, (byte) 0x5C};
+    //private Beacon[] beacons = {new Beacon("A", routerAddressA), new Beacon("C", routerAddressC), new Beacon("D", routerAddressD)};
     private Beacon[] beacons = {new Beacon("A", routerAddressA), new Beacon("C", routerAddressC)};
     private ITriColorLEDArray leds = (ITriColorLEDArray) Resources.lookup(ITriColorLEDArray.class);
+    
     private EDemoBoard eDemo = EDemoBoard.getInstance();
+    private IOutputPin resetPin = eDemo.getOutputPins()[eDemo.H0];
     private ILightSensor light = (ILightSensor) Resources.lookup(ILightSensor.class);
-    byte[] buffer = new byte[20];
+    byte[] buffer = new byte[50];
+    byte[] clearBuffer = new byte[50];
     byte[] returnAddress = new byte[8];
     String returnString = "";
     String returnHex = "";
 
-    public void writeOutUART() {
+    public void writeOutUART(int size) {
+    clearBuffer = new byte[50];
         try {
-            eDemo.readUART(buffer, 0, buffer.length * 5);
+            eDemo.readUART(buffer, 0, size);
+            Utils.sleep(50);
 
         } catch (Exception e) {
             System.out.println(e);
@@ -98,40 +105,30 @@ public class XbeeonSPOT extends MIDlet {
     }
 
     public void clearUART() {
-
         try {
-            if (eDemo.availableUART() > 1) {
-                writeOutUART();
+            while (eDemo.availableUART() > 0){
+                writeOutUART(eDemo.availableUART());
             }
-            if (eDemo.availableUART() > 1) {
-                System.out.println("UART Still not clear, trying again!");
-                clearUART();
-            }
-
         } catch (Exception e) {
             System.out.println(e);
         }
     }
-
-    public void getRemoteRSSI(byte[] address, String beaconName) {
-        System.out.println("Clearing UART...");
-        clearUART();
-        System.out.println("Pinging " + beaconName);
-        pingRSSI(address);
-        try {
-            Utils.sleep(100);
-        } catch (Exception e) {
-            System.out.println(e);
-        }
-        //System.out.println("Reading " + beaconName);
-        getResponse(beaconName);
+    
+    public void setResetHigh(){
+        resetPin.setHigh();
+    }
+    
+    public void resetXBEE(){
+        eDemo.startPulse(resetPin, false, 25);
     }
 
-    public void getBeaconRSSI(Beacon targetBeacon, Datagram datag, RadiogramConnection rc) {
+    void getBeaconRSSI(Beacon targetBeacon, Datagram datag, RadiogramConnection rc) {
+        buffer = new byte[50];
+        try {
+        //System.out.println("Getting RSSI for " + targetBeacon.getName() + ". UART length: " + eDemo.availableUART());
         clearUART();
         pingRSSI(targetBeacon.getAddress());
-        try {
-            Utils.sleep(50);
+            Utils.sleep(100);
         } catch (Exception e) {
             System.out.println(e);
         }
@@ -155,45 +152,25 @@ public class XbeeonSPOT extends MIDlet {
         eDemo.writeUART(snd);
     }
 
-    public void getResponse(String beaconName) {
-        try {
-            if (eDemo.availableUART() == 20) {
-                eDemo.readUART(buffer, 0, buffer.length);
-                //printBytes(buffer);
-
-                returnString = returnString + new String(buffer, "US-ASCII").trim();
-
-                //System.out.println(returnString);
-                //System.out.println(moteName + ": " + bytesToHexString(buffer, true));
-                int DB = buffer[19] & 0xFF;
-                //System.out.println("DB (Hex): " + dbHex);
-                System.out.println(beaconName + " [19]: " + DB);
-            } else if (eDemo.availableUART() >= 1) {
-                System.out.println("Response is wrong size!");
-                eDemo.readUART(buffer, 0, buffer.length);
-                System.out.println(beaconName + ": " + bytesToHexString(buffer, true));
-
-            }
-            else {
-                System.out.println("Buffer is empty!?");
-            }
-        } catch (IOException ex) {
-            ex.printStackTrace();
-        }
-    }
-
     public boolean getResponse(Beacon targetBeacon) {
         try {
             if (eDemo.availableUART() == 20) {
                 eDemo.readUART(buffer, 0, buffer.length);
-                int DB = buffer[19] & 0xFF;
-                System.out.println(targetBeacon.getName() + " [19]: " + DB);
+                //System.out.println(bytesToHexString(buffer, true));
+                System.out.println(targetBeacon.getName() + ": " + bytesToHexString(buffer, true));
+
+                int DB = buffer[18] & 0xFF;
+                System.out.println(targetBeacon.getName() + " [18]: " + DB);
                 targetBeacon.setRSSI((float) DB);
                 return true;
             } else if (eDemo.availableUART() >= 1) {
-                eDemo.readUART(buffer, 0, buffer.length);
-                System.out.println("Response is wrong size!");
+                System.out.println(targetBeacon.getName() + ": Response is wrong size!");
                 System.out.println(targetBeacon.getName() + ": " + bytesToHexString(buffer, true));
+                clearUART();
+            }
+            else {
+                System.out.println(targetBeacon.getName() + ": Response is empty!");
+                //Utils.sleep(200);
             }
         } catch (IOException ex) {
             ex.printStackTrace();
@@ -208,7 +185,6 @@ public class XbeeonSPOT extends MIDlet {
             datag.writeUTF(beaconName);
             datag.writeFloat(beaconRead);
             rc.send(datag);
-            Thread.sleep(50);
         } catch (Exception e) {
             System.out.println(e);
         }
@@ -229,6 +205,7 @@ public class XbeeonSPOT extends MIDlet {
      }
      }*/
     protected void startApp() throws MIDletStateChangeException {
+        setResetHigh();
         System.out.println("Starting LPS system.");
         BootloaderListenerService.getInstance().start();   // monitor the USB (if connected) and recognize commands from host
         long ourAddr = RadioFactory.getRadioPolicyManager().getIEEEAddress();
@@ -246,11 +223,12 @@ public class XbeeonSPOT extends MIDlet {
         }
 
         ISwitch sw2 = (ISwitch) Resources.lookup(ISwitch.class, "SW2");
+        resetXBEE();
         eDemo.initUART(9600, 8, 0, 1);
-        setBoostOn();
-        setPowerHigh();
+        setBoostOff();
+        setPowerLow();
         while (true) {
-            if (sw2.isClosed()) {                  // done when switch is pressed
+            //if (sw2.isClosed()) {                  // done when switch is pressed
                 //uartSender();
                 //pingRSSI(routerAddressA);
                 //getRemoteRSSI(routerAddressA, "A");
@@ -259,8 +237,8 @@ public class XbeeonSPOT extends MIDlet {
                     getBeaconRSSI(beacons[i], dg, rCon);
                     //getRemoteRSSI(beacons[i].getAddress(), beacons[i].getName());
                 }
-            }
-            Utils.sleep(500);
+            //}
+            Utils.sleep(300);
         }
     }
 

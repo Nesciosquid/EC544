@@ -1,100 +1,88 @@
 /*
  * URange.java
- *
+ *  This code sends data from a sunspot to another sunspot using OTA.
+ *  Our group will use this to extend the data input surface by having a second
+ * sunSPOT receive Ultrasonic Range indications and transmit them, as well as any 
+ * other sensors we need. This overcomes the problem of needed 5 analog inputs on a 
+ * spot, each of which can only take in 4.
  * Created on Jul 4, 2012 4:35:45 PM;
- * Modified Oct 29, 2013
  */
 
 package org.sunspotworld;
-
+import javax.microedition.io.Connector;
+import javax.microedition.io.Datagram;
+import javax.microedition.io.DatagramConnection;
+import com.sun.spot.peripheral.NoRouteException;
+import com.sun.spot.io.j2me.radiogram.RadiogramConnection;
 import com.sun.spot.peripheral.radio.RadioFactory;
 import com.sun.spot.resources.Resources;
-import com.sun.spot.resources.transducers.IInputPin;
-//import com.sun.spot.resources.transducers.IAnalogInput;
-//import com.sun.spot.sensorboard.io.AnalogInput;
+import com.sun.spot.resources.transducers.IAnalogInput;
 import com.sun.spot.sensorboard.EDemoBoard;
-import com.sun.spot.sensorboard.io.PinDescriptor;
 import com.sun.spot.service.BootloaderListenerService;
+import com.sun.spot.util.IEEEAddress;
 import com.sun.spot.util.Utils;
-
-import java.util.*;
+import java.io.IOException;
 import javax.microedition.midlet.MIDlet;
 import javax.microedition.midlet.MIDletStateChangeException;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Random;
-
-// Serial communication (RS-232)
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import javax.microedition.io.Connector;
-import javax.microedition.io.StreamConnection;
-
-
 /**
- * Important usage notes:
- * 1) When powering up, keep all objects clear in front of the sensors for at least 
- *  14". They need this clear field of view to calibrate.
- * 2) The code below must be changed to the appropriate Vcc level, 3.3V or 5V.
- * 3) If the car is moved from inside to outside while powered on, cold weather 
- *  will cause reduced up-close sensitivity.
+ * The startApp method of this class is called by the VM to start the
+ * application.
  * 
- * Serial: TX connected to D1, RX connected to D0.
- * @author  Erik Knechtel
+ * The manifest specifies this class as MIDlet-1, which means it will
+ * be selected for execution.
+ * @author  Yuting Zhang <ytzhang@bu.edu>
  */
-
-/* Note that the ultrasonic range finder uses specular reflections,
-* which require that the object it is locating have some part of its surface
-* oriented parallel with the sensor. So testing this with a flat notebook, 
-* if the notebook is tilted then the range finder cannot see it and detects 
-* infinite distance. With a person or other round object, there will always
-* be some reflection back to the sensor so this problem is avoided.
-*/
-
 public class URange extends MIDlet {
 
-    private IInputPin rxPin = EDemoBoard.getInstance().getIOPins()[EDemoBoard.D0];
-    private IInputPin txPin = EDemoBoard.getInstance().getIOPins()[EDemoBoard.D1];
-    private EDemoBoard demoBoard = EDemoBoard.getInstance();
-    
-    protected void startApp() throws MIDletStateChangeException {
-        System.out.println("Ultrasonic MaxSonar in action...");
+    public static final String BROADCAST_PORT = "37";
+
+    public void startApp() throws MIDletStateChangeException {
+        System.out.println("Starting sensor gathering");
         BootloaderListenerService.getInstance().start();   // monitor the USB (if connected) and recognize commands from host
-        demoBoard.initUART(9600, true);
-        while(true){
-            
-            System.out.println("In while loop");
-            String returnString = "";
-            byte[] buffer = new byte[64];
-            
-            try{
-                System.out.println("Trying to read:");
-                if (demoBoard.availableUART()>0){
-                    System.out.println("UART available.");
-                    demoBoard.readUART(buffer, 0, buffer.length);
-                    returnString = returnString + new String(buffer, "US-ASCII").trim();
-                    System.out.println(returnString);
-                    System.out.println("Finished getting string");
-                }
-            } 
-            catch(IOException e) {
-                if(e.getMessage().equals("empty uart buffer"))
-                    Utils.sleep(100);
-                else
-                    System.out.println(e);
-            }
-            try{
-                Thread.sleep(1000);
-            }
-            catch (InterruptedException ie){
-            }
+        long ourAddr = RadioFactory.getRadioPolicyManager().getIEEEAddress();
+        System.out.println("Our radio address = " + IEEEAddress.toDottedHex(ourAddr));
+        IAnalogInput sensor = EDemoBoard.getInstance().getAnalogInputs()[EDemoBoard.A3];
+        
+        DatagramConnection dgConnection = null;
+        Datagram dg = null;
+        try {
+            // specify broadcast_port
+            dgConnection = (DatagramConnection) Connector.open("radiogram://broadcast:"+ BROADCAST_PORT);
+
+            dg = dgConnection.newDatagram(50);
+            System.out.println("Maxlength for Packet is : " + dgConnection.getMaximumLength());
+        } catch (IOException ex) {
+            System.out.println("Could not open radiogram broadcast connection");
+            ex.printStackTrace();
+            return;
         }
-    }
-  
-    protected void pauseApp() {
+        while(true){
+            try {
+                
+                // 9.8mV per inch
+                double val = sensor.getVoltage();
+                System.out.println("Value in volts: "+ val);  
+                double inches = val/0.0098;
+                System.out.println("Value in inches: "+ inches);
+                // Write the string into the dataGram.
+                dg.reset();
+                dg.writeLong(ourAddr);
+                dg.writeDouble(val);
+
+                //Send DataGram
+                dgConnection.send(dg);
+
+                // Sleep for 200 milliseconds.
+                Utils.sleep(200); 
+            } catch (IOException ex){
+                System.err.println("Caught " + ex + " while collecting/sending sensor sample.");
+                ex.printStackTrace();
+            }
+       }
     }
 
-    protected void destroyApp(boolean unconditional) throws MIDletStateChangeException {
-    }
+    protected void pauseApp() {}
+    protected void destroyApp(boolean unconditional) throws MIDletStateChangeException {}
+    
 }
