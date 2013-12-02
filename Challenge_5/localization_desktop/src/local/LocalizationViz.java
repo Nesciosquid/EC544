@@ -44,7 +44,7 @@ public class LocalizationViz extends PApplet {
         isSimulating = false;
         reads = new float[4];
         wait = false;
-        beacons = new Beacon[2];
+        beacons = new Beacon[3];
         jitter = false;
         offset_mouse = false;
         frameRate(60);
@@ -71,7 +71,8 @@ public class LocalizationViz extends PApplet {
         stroke(0);
         noFill();
         beacons[0] = new Beacon(inset, inset, "C");
-        beacons[1] = new Beacon(inset+350, inset, "A");
+        beacons[1] = new Beacon(inset+250, inset, "A");
+        beacons[2] = new Beacon(inset, inset+250, "E");
         //beacons[2] = new Beacon(inset, innerWidth+inset/2, "D");
         //beacons[3] = new Beacon(innerWidth, innerWidth, "D");
     }
@@ -171,7 +172,7 @@ public class LocalizationViz extends PApplet {
     public static void updateBeacons() {
         for (int i = 0; i < beacons.length; i++) {
             if (!isSimulating){
-            beacons[i].setRadius(reads[i]*50); // reads are in meters, convert 1 meter to 50 pixels
+            beacons[i].setRadius(reads[i]*75); // reads are in meters, convert 1 meter to 50 pixels
             }
             else 
                 beacons[i].setRadius(reads[i]);
