@@ -86,10 +86,10 @@ public class IRDaemon {
     public CarPoint getCarpoint(int turn, int setSpeed, boolean startTurn, boolean stopTurn){
         CarPoint cp = new CarPoint();
         cp.time = System.currentTimeMillis();
-      cp.LF = (float)distanceLF;
-      cp.RF = (float)distanceRF;
-      cp.LR = (float)distanceLR;
-      cp.RR = (float)distanceRR;
+      cp.LF = (float)readingLF;
+      cp.RF = (float)readingRF;
+      cp.LR = (float)readingLR;
+      cp.RR = (float)readingRR;
       cp.distRight = (float)distanceAvgR;
       cp.distLeft = (float)distanceAvgL;
       cp.LT = (float)calcTrust(confidenceLF,confidenceLR);
