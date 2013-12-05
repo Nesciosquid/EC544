@@ -129,6 +129,8 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     RadiogramConnection[] broadcastConnections = new RadiogramConnection[BROADCAST_PORT_COUNT];
     Datagram[] broadcastDatagrams = new Datagram[BROADCAST_PORT_COUNT];
 
+    //Initialize RadiogramConnections.
+    //Makes as many as BROADCST_PORT_COUNT specifies. 
     private void initializeConn() {
         String ourAddress = System.getProperty("IEEE_ADDRESS");
 
@@ -147,6 +149,8 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         }
     }
 
+    
+    //Constructor, currently not used
     public MainCarController() {
     }
 
@@ -154,6 +158,8 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         // do nothing
     }
 
+    //Switch 1 cycles the speed. 1500->1000 in 100 increments, then 1500 again. 
+    //Remember, 1000 is FAST forward!
     public void switchPressed(SwitchEvent sw) {
         if (sw.getSwitch() == sw1) {
             if (setSpeed > 1000) {
@@ -169,6 +175,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         }
     }
 
+    //Write a CarPoint object to a datagram. 
     private void writeToDatagram(CarPoint cp, Datagram dg) {
         try {
             dg.reset();
@@ -197,11 +204,12 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         }
     }
 
+    //Write a CarPoint object into a datagram and send it over a connection.
     private void transmitCarPoint(CarPoint cp, RadiogramConnection rc, Datagram dg) {
         try {
             dg = rc.newDatagram(rc.getMaximumLength());
             writeToDatagram(cp, dg);
-            System.out.println("Sending carpoint! Time: " + System.currentTimeMillis());
+            //System.out.println("Sending carpoint! Time: " + System.currentTimeMillis());
             rc.send(dg);
         } catch (IOException ex) {
             System.out.println(ex);
@@ -210,106 +218,46 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     }
 
     /**
-     * BASIC STARTUP CODE *
+     * This code runs when the app begins, usually on SunSPOT restart. *
      */
     protected void startApp() throws MIDletStateChangeException {
+        BootloaderListenerService.getInstance().start();
         initializeConn();
         System.out.println("Hello, world");
         sw1.addISwitchListener(this);
         sw2.addISwitchListener(this);
+        
         IRDaemon IR_DAEMON = new IRDaemon(irRightFront, irLeftFront, irRightRear, irLeftRear, CAR_LENGTH, CONFIDENCE_DISTANCE);
         LEDaemon LED_DAEMON = new LEDaemon(myLEDs, REVERSE_LEDS, CONFIDENCE_HIGH_CUTOFF, CONFIDENCE_CUTOFF_STEP, MAX_TRACKING_ANGLE);
         turnHard();
-        BootloaderListenerService.getInstance().start();
-
+        
         for (int i = 0; i < myLEDs.size(); i++) {
             myLEDs.setOn();
             myLEDs.getLED(i).setColor(LEDColor.GREEN);
         }
+        
         Utils.sleep(500);
         LED_DAEMON.setAllOff();
+        int broadcastCounter = 0; //Used with BROADCAST_PORT_COUNT
+        int skipCounter = 0; // Used to skip sending datapoints to reduce network traffic
 
-        //velocityBlinker.setColor(LEDColor.BLUE);
-        //progBlinker.setColor(LEDColor.BLUE);
+        while (STOP != 1) { // Currently mapped to sw2
 
-
-        boolean error = false;
-        int broadcastCounter = 0;
-        int skipCounter = 0;
-
-        while (STOP != 1) {
-
-            //boolean timeoutError = robot.isTimeoutError();
-            //int st = 0;
-            int rl = 0;
-            //if (!timeoutError) {
-            //rl = robot.getVal(0);
-            //rl = leftOrRight();
-            IR_DAEMON.update();
-
+            IR_DAEMON.update(); //Does a LOT of calculatoins, see IR_DAEMON class!
             LED_DAEMON.changeColors(IR_DAEMON.thetaRight, IR_DAEMON.thetaLeft, IR_DAEMON.confidenceRF, IR_DAEMON.confidenceLF, IR_DAEMON.confidenceRR, IR_DAEMON.confidenceLR);
-            String command = IR_DAEMON.pickDirection();
+            String command = IR_DAEMON.pickDirection(); // You MUST call pickDirection(); or IR_DAEMON will give you the wrong response for turnSuggest!
             setTurn = IR_DAEMON.turnSuggest;
-            //d.report();
-            //System.out.println("Suggested turn value: " + setTurn);
-
-            //System.out.println("setting turn to: setTurn");
-            //System.out.println("Turn servo set to: " + turnServo.getValue());
-            //System.out.println(command);
-            if (command == "unknown") {
+            
+            //If the IR_DAEMON can't tell you where to go, you should slow down...
+            if (command.equals("unknown")) {
                 driveSlow();
             }
-            /*else if (command == "straight"){
-             setTurn = SERVO_CENTER_VALUE;
-             }
-             else if (command == "left"){
-             setTurn = SERVO_MAX_VALUE;
-             }
-            
-             else if (command == "slight-left"){
-             setTurn = 1750;
-             }
-            
-             else if (command == "slight-right"){
-             setTurn = 1250;
-             }
-            
-             else if (command == "tiny-left"){
-             setTurn = 1600;
-             }
-            
-             else if (command == "tiny-right"){
-             setTurn = 1400;
-             }
-            
-             else if (command == "right"){
-             setTurn = SERVO_MIN_VALUE;
-             }*/
-
-
-
-            //st = robot.getVal(1);
-            /*if (error) {
-             step1 = SERVO1_LOW_STEP;
-             step2 = SERVO2_LOW_STEP;
-             //velocityBlinker.setColor(LEDColor.BLUE);
-             //progBlinker.setColor(LEDColor.BLUE);
-             error = false;
-             }*/
-
-            //steer();
-            turnHard();
-            if (command == "unknown") {
-                driveSlow();
-            } else {
+            else {
                 drive();
             }
-            /*} else {
-             velocityBlinker.setColor(LEDColor.RED);
-             progBlinker.set
-             Color(LEDColor.RED);
-             error = true;
-             }*/
+            turnHard();
+
+            //Used for transmitting to different ports, and skipping transmission of datapoints
             if (skipCounter == BROADCAST_POINT_SKIP) {
                 CarPoint cp = IR_DAEMON.getCarpoint(setTurn, setSpeed, startTurn, stopTurn);
                 transmitCarPoint(cp,broadcastConnections[broadcastCounter], broadcastDatagrams[broadcastCounter]);
@@ -324,7 +272,6 @@ public class MainCarController extends MIDlet implements ISwitchListener {
             else {
                 skipCounter++;
             }
-            System.out.println("Counter: " + broadcastCounter + ", skipCounter: " + skipCounter);
 
             Utils.sleep(SAMPLE_TIME);
             if (STOP == 1) {
@@ -332,255 +279,63 @@ public class MainCarController extends MIDlet implements ISwitchListener {
             }
         }
     }
-
-    private void setServoForwardValue() {
-        servo1Left = current1 + step1;
-        servo1Right = current1 - step1;
-        servo2Forward = current2 + step2;
-        servo2Back = current2 - step2;
-        if (step2 == SPEED_HIGH_STEP) {
-            velocityBlinker.setColor(LEDColor.GREEN);
-        } else {
-            velocityBlinker.setColor(LEDColor.BLUE);
-        }
-    }
-
-    private void offsetLeft() {
-        System.out.println("offsetting left...");
-        for (int i = 0; i < getTurnLength(); i++) {
-            forward();
-            left();
-            try {
-                Thread.sleep(50);
-            } catch (InterruptedException ex) {
-            }
-        }
-        int fixTurn = (int) (getTurnLength() / 2);
-        for (int i = 0; i < fixTurn; i++) {
-            forward();
-            right();
-            try {
-                Thread.sleep(50);
-            } catch (InterruptedException ex) {
-            }
-        }
-        goStraight();
-
-    }
-
-    private int getTurnLength() {
-        int speed_diff = 1500 - setSpeed; // max speed = 500; min speed = 100;
-        int speed_diff_importance = speed_diff / 500; // max speed = 1; min speed = 1/5;
-        int turn_length_adjust = (int) (speed_diff_importance * (default_turn_cycles / 2));
-        return default_turn_cycles - turn_length_adjust;
-    }
-
-    private void offsetRight() {
-        System.out.println("Offsetting right...");
-
-        for (int i = 0; i < getTurnLength(); i++) {
-            forward();
-            right();
-            try {
-                Thread.sleep(50);
-            } catch (InterruptedException ex) {
-            }
-        }
-        int fixTurn = (int) (getTurnLength() / 2);
-        for (int i = 0; i < fixTurn; i++) {
-            forward();
-            left();
-            try {
-                Thread.sleep(50);
-            } catch (InterruptedException ex) {
-            }
-        }
-        goStraight();
-
-    }
-
-    private void left() {
-        System.out.println("left");
-        current1 = turnServo.getValue();
-        if (current1 + step1 < TURN_MAX_VALUE) {
-            turnServo.setValue(current1 + step1);
-            Utils.sleep(10);
-        } else {
-            turnServo.setValue(TURN_MAX_VALUE);
-            Utils.sleep(10);
-        }
-    }
-
-    private void right() {
-        System.out.println("right");
-        current1 = turnServo.getValue();
-        if (current1 - step1 > TURN_MIN_VALUE) {
-            turnServo.setValue(current1 - step1);
-            Utils.sleep(10);
-        } else {
-            turnServo.setValue(TURN_MIN_VALUE);
-            Utils.sleep(10);
-        }
-        //servo2.setValue(0);
-    }
-
-    private void stop() {
-        //System.out.println("stop");
-        //servo1.setValue(0);
-        speedServo.setValue(SERVO_CENTER_VALUE);
-    }
-
-    private void goStraight() {
-        //System.out.println("stop");
-        //servo1.setValue(0);
-        turnServo.setValue(SERVO_CENTER_VALUE);
-    }
-
-    private void steer() {
+    
+    //Update turn servo to approach current setTurn value
+    private void updateSteer() {
         updateServo(turnServo, setTurn, TURN_LOW_STEP);
-        //System.out.println("Turning: " + setTurn);
     }
 
-    private void turnHard() {
+    //sets the turn servo to the current setTurn value
+    private void turnHard() { 
         setServo(turnServo, setTurn);
-        //System.out.println("Turning Hard: " + setTurn);
-        //System.out.println("SetTurn: " + setTurn);
-        if (setTurn < 1500) {
-            //System.out.println("****car sould be turning right");
-        } else if (setTurn > 1500) {
-            //System.out.println("***Car should be turning left");
-        } else {
-            // System.out.println("Car should be going straight");
-        }
     }
 
+    //Update the car's speed to approach the current setSpeed
     private void drive() {
         updateServo(speedServo, setSpeed, SPEED_LOW_STEP);
     }
 
+    //Update the car's speed to approach the slowSpeed setting
     private void driveSlow() {
-        if (setSpeed < 1400) {
             updateServo(speedServo, slowSpeed, SPEED_HIGH_STEP);
-        }
     }
 
+    //Set servo to the target value.
+    //Like updateServo but with 'infinite' acceleration
     private void setServo(Servo target_servo, int target_value) {
         target_servo.setValue(target_value);
     }
 
-    private void updateServo(Servo target_servo, int target_value, int acceleration) {
+    //Update the value of a servo to approach a set point, one acceleration unit at a time
+    //Call repeatedly (with delays between) to reach set_point
+    private void updateServo(Servo target_servo, int set_point, int acceleration) {
         int currentValue = target_servo.getValue();
         int newValue;
 
-        if (target_value < SERVO_MIN_VALUE) {
-            target_value = SERVO_MIN_VALUE;
-        } else if (target_value > SERVO_MAX_VALUE) {
-            target_value = SERVO_MAX_VALUE;
+        if (set_point < SERVO_MIN_VALUE) {
+            set_point = SERVO_MIN_VALUE;
+        } else if (set_point > SERVO_MAX_VALUE) {
+            set_point = SERVO_MAX_VALUE;
         }
 
-        if (target_value < currentValue) {
+        if (set_point < currentValue) {
             {
                 newValue = currentValue - acceleration;
             }
-            if (target_value < newValue) {
-                newValue = target_value;
+            if (set_point < newValue) {
+                newValue = set_point;
             }
-        } else if (target_value > currentValue) {
+        } else if (set_point > currentValue) {
             newValue = currentValue + acceleration;
-            if (target_value > newValue) {
-                newValue = target_value;
+            if (set_point > newValue) {
+                newValue = set_point;
             }
         } else {
-            newValue = target_value;
+            newValue = set_point;
         }
         target_servo.setValue(newValue);
     }
 
-    private void forward() {
-        speedServo.setValue(setSpeed);
-    }
-
-    private int leftOrRight() {
-        int rl_val = 0;
-        double LF = getDistance(irLeftFront);
-        double LR = getDistance(irLeftRear);
-        double RF = getDistance(irRightFront);
-        double RR = getDistance(irRightRear);
-        double averageLeft = (LF + LR) / 2;
-        double averageRight = (RF + RR) / 2;
-
-        if (averageLeft < averageRight) { // closer to left wall, so use left sensors
-            double left_diff = LF - LR;
-            double left_diff_importance = Math.abs(left_diff) / averageLeft;
-            if (averageLeft > 30) { // If the left wall is closer, but farther than half the hall away, turn toward it. (Alcove on right!)
-                rl_val = 0;
-            } else {
-                //System.out.println("Left diff importance" + left_diff_importance);
-                if (left_diff_importance > .05) { // significant difference between front and back sensors
-                    if (left_diff > 0) { // LR is closer to wall than LF
-                        if (averageLeft < 15) {
-                            rl_val = 0; // go forward -- you might be too close to correct angle!
-                        } else {
-                            rl_val = -50; // adjust the steering left to straighten out.
-                        }
-                    } else if (left_diff < 0) // LF is closer to wall than LR
-                    {
-                        rl_val = 50; // Set RL high to turn right
-                    }
-                } else if (averageLeft < 15) {
-                    offsetRight(); // Continue going straight (for now!) Should replace with an offset-position method!
-                } else {
-                    rl_val = 0;
-                }
-            }
-
-        } else if (averageRight < averageLeft) {
-            double right_diff = RF - RR;
-            double right_diff_importance = Math.abs(right_diff) / averageRight;
-            if (averageRight > 30) { // If the right wall is closer, but farther than half the hall away, don't turn. (Alcove on left!)
-                rl_val = 0;
-            } else {
-                //System.out.println("right difference" + right_diff_importance);
-                if (right_diff_importance > .05) { // significant difference between front and back sensors
-                    if (right_diff > 0) { // RR is closer to wall than RF
-                        if (averageRight < 15) {
-                            rl_val = 0; // go forward -- you might be too close to correct angle!
-                        } else {
-                            rl_val = 50; // turn right to straighten out
-                        }
-                    } else if (right_diff < 0) // LF is closer to wall than LR
-                    {
-                        rl_val = -50; // Set RL low to turn left
-                    }
-                } else if (averageRight < 15) {
-                    offsetLeft();
-                } else {
-                    rl_val = 0; // Continue going straight (for now!) Should replace with an offset-position method!
-                }
-            }
-        }
-        return rl_val;
-    }
-
-    public double getDistance(IAnalogInput analog) {
-        double volts = 0;
-        try {
-            volts = analog.getVoltage();
-        } catch (IOException e) {
-            System.err.println(e);
-        }
-        return 18.67 / (volts + 0.167);
-    }
-
-    /*public void switchPressed(SwitchEvent sw) {
-     step1 = (step1 == SERVO1_HIGH) ? SERVO1_LOW : SERVO1_HIGH;
-     step2 = (step2 == SERVO2_HIGH) ? SERVO2_LOW : SERVO2_HIGH;
-     setServoForwardValue();
-     }
-    
-     public void switchReleased(SwitchEvent sw) {
-     // do nothing
-     }*/
     protected void pauseApp() {
         // This will never be called by the Squawk VM
     }
