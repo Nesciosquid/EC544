@@ -20,9 +20,13 @@ public class CSVWriter {
     private String filePath;
     
     public CSVWriter(String new_path)
-    {
+    { try{
         dataOut = null;
         filePath = new_path;
+        dataOut = new FileWriter(filePath, true);
+    }catch (IOException ex){
+            System.out.println("IO Exception " + ex + " in CSVWriter()!");
+        }
     }
     
     public void setFilePath(String new_path)
@@ -40,6 +44,7 @@ public class CSVWriter {
         dataOut.write(header + System.getProperty("line.separator"));
         dataOut.flush();
         dataOut.close();
+        dataOut = new FileWriter(filePath, true);
         }
         catch (IOException ex){
             System.out.println("IO Exception " + ex + " in initCSV!");
@@ -51,10 +56,8 @@ public class CSVWriter {
         int waitDelay = 3 * 1000;
 
         try {
-            dataOut = new FileWriter(filePath, true);
             dataOut.write(line + System.getProperty("line.separator"));
             dataOut.flush();
-            dataOut.close();
         } catch (IOException ex) {
             System.out.println("Error accessing output file:" + filePath);
             for (int i = 0; i < 3; i++) {

@@ -37,7 +37,7 @@ public class CarPoint {
         String outputLine = time + "," + LF + "," + RF + "," + LR + "," + RR + "," + LT + "," + RT + "," + distRight + "," + distLeft
                 + "," + thetaRight + "," + thetaLeft + "," + theta + "," + distance + "," + turn + "," + velocity
                 + "," + targetDist + "," + startTurn + "," + stopTurn + "," + targetTheta;
-        System.out.println(outputLine);
+        //System.out.println(outputLine);
         return outputLine;
     }
 

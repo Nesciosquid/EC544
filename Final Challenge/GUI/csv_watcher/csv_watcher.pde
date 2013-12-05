@@ -40,7 +40,7 @@ void setup() {
   live = false;
   playback = true;
   scrubbing = false;
-  loop = true;
+  loop = false;
   // Open the file from the createWriter() example
   //reader = createReader("test2.csv");    
   reader = createReader("../live.csv");   
@@ -225,70 +225,79 @@ boolean overScrubber(){
   else return false;
 }
 
-void checkData(){
-String line;
-String output;
-String[] currentLine;
-CarPoint cp;
+    void checkData() {
+        String thisLine;
+        String output;
+        String[] currentLine;
+        CarPoint cp;
 
-  try {
-    while (reader.ready()){
-        output = "";
-  try {
-    line = reader.readLine();
-  } catch (IOException e) {
-    e.printStackTrace();
-    line = null;
-  }
-  if (line == null) {
-    // Stop reading because of an error or file is empty
-  } else {
-    currentLine = split(line,",");
-    if (currentLine[0].equals("time")){
-      System.out.print("Header:");
-      for (int i = 0; i < currentLine.length; i++){
-        output +=currentLine[i];
-        if (i != currentLine.length-1)
-        output += ",";
-        
-  }
-    System.out.println(output);
-}
-else {
-  if (currentLine.length == csvWidth){
-  cp = new CarPoint();
-  for (int i = 0; i < currentLine.length; i++){
-  switch (i){
-    case 0: cp.time = storeData(currentLine[i]);
-    case 1: cp.LF = storeData(currentLine[i]);
-    case 2: cp.RF = storeData(currentLine[i]);
-    case 3: cp.LR = storeData(currentLine[i]);
-    case 4: cp.RR = storeData(currentLine[i]);
-    case 5: cp.LT = storeData(currentLine[i]);
-    case 6: cp.RT = storeData(currentLine[i]);
-    case 7: cp.distRight = storeData(currentLine[i]);
-    case 8: cp.distLeft = storeData(currentLine[i]);
-    case 9: cp.thetaRight = storeData(currentLine[i]);
-    case 10: cp.thetaLeft = storeData(currentLine[i]);
-    case 11: cp.theta = storeData(currentLine[i]);
-    case 12: cp.distance = storeData(currentLine[i]);
-    case 13: cp.turn = storeData(currentLine[i]);
-    case 14: cp.velocity = storeData(currentLine[i]);
-    case 15: cp.targetDist = storeData(currentLine[i]);
-    case 16: cp.startTurn = storeData(currentLine[i]);
-    case 17: cp.stopTurn = storeData(currentLine[i]);
-    case 18: cp.targetTheta = storeData(currentLine[i]);
-  }
-  }
-          allPoints.add(cp);
-}
-  }
-  }
-  line = null;
-}
-  }
-  catch(IOException e){}
-}
+        try {
+            while ((thisLine = reader.readLine()) != null) {
+                output = "";
+                currentLine = split(thisLine, ",");
+                if (currentLine[0].equals("time")) {
+                    System.out.print("Header:");
+                    for (int i = 0; i < currentLine.length; i++) {
+                        output += currentLine[i];
+                        if (i != currentLine.length - 1) {
+                            output += ",";
+                        }
+
+                    }
+                    System.out.println(output);
+                } else {
+                    if (currentLine.length == csvWidth) {
+                        cp = new CarPoint();
+                        for (int i = 0; i < currentLine.length; i++) {
+                            switch (i) {
+                                case 0:
+                                    cp.time = storeData(currentLine[i]);
+                                    case 1:
+                                        cp.LF = storeData(currentLine[i]);
+                                    case 2:
+                                        cp.RF = storeData(currentLine[i]);
+                                    case 3:
+                                        cp.LR = storeData(currentLine[i]);
+                                    case 4:
+                                        cp.RR = storeData(currentLine[i]);
+                                    case 5:
+                                        cp.LT = storeData(currentLine[i]);
+                                    case 6:
+                                        cp.RT = storeData(currentLine[i]);
+                                    case 7:
+                                        cp.distRight = storeData(currentLine[i]);
+                                    case 8:
+                                        cp.distLeft = storeData(currentLine[i]);
+                                    case 9:
+                                        cp.thetaRight = storeData(currentLine[i]);
+                                    case 10:
+                                        cp.thetaLeft = storeData(currentLine[i]);
+                                    case 11:
+                                        cp.theta = storeData(currentLine[i]);
+                                    case 12:
+                                        cp.distance = storeData(currentLine[i]);
+                                    case 13:
+                                        cp.turn = storeData(currentLine[i]);
+                                    case 14:
+                                        cp.velocity = storeData(currentLine[i]);
+                                    case 15:
+                                        cp.targetDist = storeData(currentLine[i]);
+                                    case 16:
+                                        cp.startTurn = storeData(currentLine[i]);
+                                    case 17:
+                                        cp.stopTurn = storeData(currentLine[i]);
+                                    case 18:
+                                        cp.targetTheta = storeData(currentLine[i]);
+                                }
+                            }
+                            allPoints.add(cp);
+                        }
+                    }
+                }
+            
+        } catch (IOException e) {
+        }
+    }
 
 public void mouseWheel(MouseEvent event) {
   float e = event.getAmount();
@@ -529,7 +538,7 @@ class Wheel{
   }
   
   void updateTheta(){
-    float turnDiff = (turnAmount - centerTurn); //-500 for right, 500 left
+    float turnDiff = (centerTurn - turnAmount); //-500 for right, 500 left
     turnTheta = (float)(turnDiff / 500) * maxTheta;
   }
   

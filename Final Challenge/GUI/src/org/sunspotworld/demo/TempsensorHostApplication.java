@@ -24,7 +24,8 @@
 package org.sunspotworld.demo;
 
 import com.sun.spot.io.j2me.radiogram.*;
-
+import com.sun.spot.peripheral.radio.IPacketQualityListener;
+import com.sun.spot.peripheral.radio.RadioPacketDispatcher;
 import com.sun.spot.peripheral.ota.OTACommandServer;
 import com.sun.spot.util.IEEEAddress;
 import javax.microedition.io.*;
@@ -65,9 +66,23 @@ public class TempsensorHostApplication {
     private HashMap log_columnIDs = new HashMap();
     private ArrayList<String> log_header_names = new ArrayList<String>();
     private HashMap temp_offets = new HashMap();
+    private double tp = 0.0;
     private HashMap temp_scales = new HashMap();
+    private ArrayList<CarPoint> outPoints = new ArrayList<CarPoint>();
+    private Listener listen = new Listener();
+    private int channelIndex;
+    private int RECEIVE_PORT_COUNT = 1;
+    Datagram[] allDatagrams = new Datagram[RECEIVE_PORT_COUNT];
+    RadiogramConnection[] allConnections = new RadiogramConnection[RECEIVE_PORT_COUNT];
 
+    class Listener implements IPacketQualityListener {
+
+        public void notifyPacket(long src, long dest, int rssi, int corr, int lqi, int length) {
+            System.out.println("Packet received!: " + System.currentTimeMillis());
+        }
+    }
     //-----------Set up 
+
     private void setup() {
         JFrame fr = new JFrame("Send Data Host App");
         JScrollPane sp = new JScrollPane(status);
@@ -76,54 +91,80 @@ public class TempsensorHostApplication {
         fr.validate();
         fr.setVisible(true);
     }
-    
-    private CarPoint toCarPoint(Datagram dg){
+
+    private void writeLoop() {
+        while (true) {
+
+            while (outPoints.size() > 0) {
+                System.out.println("in write loop, " + outPoints.size());
+                System.out.println("Adding carpoint to CSV");
+                out.addCSVLine(outPoints.get(0).toString());
+                logger.addCSVLine(outPoints.get(0).toString());
+                outPoints.remove(0);
+                
+            }
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                System.out.println("Exception" + e + " in writeLoop");
+
+            }
+        }
+    }
+
+    private CarPoint toCarPoint(Datagram dg) {
         CarPoint cp = new CarPoint();
         try {
-        cp.time = dg.readFloat();
-        cp.LF = dg.readFloat();
-        cp.RF = dg.readFloat();
-        cp.LR = dg.readFloat();
-        cp.RR = dg.readFloat();
-        cp.distRight = dg.readFloat();
-        cp.distLeft = dg.readFloat();
-        cp.LT = dg.readFloat();
-        cp.RT = dg.readFloat();
-        cp.thetaRight = dg.readFloat();
-        cp.thetaLeft = dg.readFloat();
-        cp.theta = dg.readFloat();
-        cp.distance = dg.readFloat();
-        cp.turn = dg.readFloat();
-        cp.velocity = dg.readFloat();
-        cp.targetDist = dg.readFloat();
-        cp.startTurn = dg.readFloat();
-        cp.stopTurn = dg.readFloat();
-        cp.targetTheta = dg.readFloat();
-        //System.out.println("Got CP datagram:" );
-        //cp.printPoint();
-        }
-        catch (IOException e){
+            cp.time = dg.readFloat();
+            cp.LF = dg.readFloat();
+            cp.RF = dg.readFloat();
+            cp.LR = dg.readFloat();
+            cp.RR = dg.readFloat();
+            cp.distRight = dg.readFloat();
+            cp.distLeft = dg.readFloat();
+            cp.LT = dg.readFloat();
+            cp.RT = dg.readFloat();
+            cp.thetaRight = dg.readFloat();
+            cp.thetaLeft = dg.readFloat();
+            cp.theta = dg.readFloat();
+            cp.distance = dg.readFloat();
+            cp.turn = dg.readFloat();
+            cp.velocity = dg.readFloat();
+            cp.targetDist = dg.readFloat();
+            cp.startTurn = dg.readFloat();
+            cp.stopTurn = dg.readFloat();
+            cp.targetTheta = dg.readFloat();
+            //System.out.println("Got CP datagram:" );
+            //cp.printPoint();
+        } catch (IOException e) {
             System.out.println(e);
             System.out.println("IOException in toCarPoint");
         }
-        
+
         return cp;
     }
 
     //This is for receiving data and draw
     private void run() throws Exception {
-        RadiogramConnection rCon;
-        Radiogram dg;
+        RadioPacketDispatcher.getInstance().registerPacketQualityListener(listen);
         String headerLine = "time,LF,RF,LR,RR,LT,RT,distRight,distLeft,thetaRight,thetaLeft,theta,distance,turn,velocity,targetDist,startTurn,stopTurn,targetTheta";
         logger.initCSV(headerLine);
         out.initCSV(headerLine);
+        new Thread() {
+            public void run() {
+                writeLoop();
+            }
+        }.start();
 
         //------ This part does not need to modify. dg is the received package.---------//
         try {
+            for (int i = 0; i < RECEIVE_PORT_COUNT; i++){
             // Open up a server-side broadcast radiogram connection
             // to listen for sensor readings being sent by different SPOTs
-            rCon = (RadiogramConnection) Connector.open("radiogram://:" + HOST_PORT);
-            dg = (Radiogram) rCon.newDatagram(rCon.getMaximumLength());
+            allConnections[i] = (RadiogramConnection) Connector.open("radiogram://:" + (HOST_PORT+i));
+            allDatagrams[i] =  allConnections[i].newDatagram(allConnections[i].getMaximumLength());
+            }
+            
         } catch (Exception e) {
             System.err.println("setUp caught " + e.getMessage());
             throw e;
@@ -134,24 +175,62 @@ public class TempsensorHostApplication {
         // Main data collection loop
         //This part is worth attention
         //Hashtable<String, Data> Inf = new Hashtable<String, Data>();
+        
+        for (int j = 0; j < RECEIVE_PORT_COUNT; j++){
+            channelIndex = j;
+            System.out.println("Channel index:" + j );
+            new Thread() {
+            public void run() {
+                System.out.println("Started receive loop: " + channelIndex);
+                receiveLoop(allConnections[channelIndex], allDatagrams[channelIndex], channelIndex);
+                
+            }
+        }.start();
+            Thread.sleep(50);
+        }
+        
+        System.out.println("Test after receive loops");
 
+    }
+
+    private void receiveLoop(RadiogramConnection rc, Datagram dg, int number) {
+        System.out.println("Started receive loop" + number);
         while (true) {
-            System.out.println("In the while loop");
             try {
+                //System.out.println("Receive loop number: " + number);
+                //System.out.println("Repeating while loop took: " + (System.currentTimeMillis() - tp) + " milliseconds.");
                 // Read sensor sample received over the radio
-                rCon.receive(dg);
+                dg = rc.newDatagram(rc.getMaximumLength());
+                double startPoint = System.currentTimeMillis();
+                rc.receive(dg);
+                System.out.println("Got datagram in loop: " + number);
+                double timepoint = System.currentTimeMillis();
                 String node = dg.getAddress(); // read address of the Spot that sent the datagram
-                String firstLine = dg.readUTF();
-                if(firstLine.equals("CarPoint")){
-                    CarPoint cp = toCarPoint(dg);
-                    
-                    logger.addCSVLine(cp.toString());
-                    out.addCSVLine(cp.toString());
+                String firstLine = "";
+                if (dg.getLength() != 0) {
+                    firstLine = dg.readUTF();
                 }
-                else System.out.println("Packet of unknown type: " + firstLine);
-            } catch (Exception e) {
+                else {
+                    System.out.println("Datagram length = 0!");
+                }
+
+                if (firstLine.equals("CarPoint")) {
+                    CarPoint cp = toCarPoint(dg);
+                    //logger.addCSVLine(cp.toString());
+
+                    outPoints.add(cp);
+
+                } else {
+                    System.out.println("Packet of unknown type: " + firstLine);
+                }
+                //System.out.println("Got carpoint, " + outPoints.size() + "in queue:  "+ System.currentTimeMillis());
+                System.out.println("Receiving took: " + (System.currentTimeMillis() - tp) + " milliseconds, Processing took: " + (System.currentTimeMillis() - timepoint) + "milliseconds.");
+                System.out.println("Datagram received at" + timepoint + ", Datagram size: " + dg.getLength());
+                tp = System.currentTimeMillis();
+            
+            }catch (Exception e) {
                 System.err.println("Caught " + e + " while reading sensor samples.");
-                throw e;
+
             }
         }
     }

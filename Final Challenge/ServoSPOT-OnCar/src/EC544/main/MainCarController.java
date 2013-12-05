@@ -73,7 +73,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     private static final int SPEED_MIN_VALUE = 1000; // go forward fast
     private static final int SERVO_MAX_VALUE = 2000;
     private static final int SERVO_MIN_VALUE = 1000;
-    private static final int SAMPLE_TIME = 100;
+    private static final int SAMPLE_TIME = 50;
     private static final int TURN_HIGH_STEP = 500; //steering step high
     private static final int TURN_LOW_STEP = 20; //steering step low
     private static final int SPEED_HIGH_STEP = 50; //speeding step high
@@ -92,10 +92,10 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     // Devices
     private EDemoBoard eDemo = EDemoBoard.getInstance();
     //private ISwitch sw = eDemo.getSwitches()[EDemoBoard.SW1];
-    private IAnalogInput irRightFront = eDemo.getAnalogInputs()[EDemoBoard.A0];
-    private IAnalogInput irLeftFront = eDemo.getAnalogInputs()[EDemoBoard.A1];
-    private IAnalogInput irRightRear = eDemo.getAnalogInputs()[EDemoBoard.A2];
-    private IAnalogInput irLeftRear = eDemo.getAnalogInputs()[EDemoBoard.A3];
+    private IAnalogInput irRightFront = eDemo.getAnalogInputs()[EDemoBoard.A1];
+    private IAnalogInput irLeftFront = eDemo.getAnalogInputs()[EDemoBoard.A0];
+    private IAnalogInput irRightRear = eDemo.getAnalogInputs()[EDemoBoard.A3];
+    private IAnalogInput irLeftRear = eDemo.getAnalogInputs()[EDemoBoard.A2];
     private ISwitch sw1 = eDemo.getSwitches()[EDemoBoard.SW1];
     private ISwitch sw2 = eDemo.getSwitches()[EDemoBoard.SW2];
     private ITriColorLED[] leds = eDemo.getLEDs();
@@ -124,20 +124,22 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     private int default_turn_cycles = 5;
     private long myAddr = 0;
     private int STOP = 0;
-    RadiogramConnection xmitConn;
-    Datagram dg;
-    
+    private int BROADCAST_PORT_COUNT = 1;
+    private int BROADCAST_POINT_SKIP = 4;
+    RadiogramConnection[] broadcastConnections = new RadiogramConnection[BROADCAST_PORT_COUNT];
+    Datagram[] broadcastDatagrams = new Datagram[BROADCAST_PORT_COUNT];
+
     private void initializeConn() {
-        xmitConn = null;
-        dg = null;
         String ourAddress = System.getProperty("IEEE_ADDRESS");
 
         try {
             // Open up a broadcast connection to the host port
             // where the 'on Desktop' portion of this demo is listening
-            xmitConn = (RadiogramConnection) Connector.open("radiogram://broadcast:" + HOST_PORT);
-            System.out.println("Set up xmitConn...");
-            dg = xmitConn.newDatagram(xmitConn.getMaximumLength());  // only sending 12 bytes of data
+            for (int i = 0; i < BROADCAST_PORT_COUNT; i++){
+                broadcastConnections[i] = (RadiogramConnection) Connector.open("radiogram://broadcast:" + (HOST_PORT + i));
+                broadcastDatagrams[i] = broadcastConnections[i].newDatagram(broadcastConnections[i].getMaximumLength());
+            }
+            System.out.println("Set up xmitConn(s)...");
             System.out.println("Set up dg...");
         } catch (Exception e) {
             System.err.println("Caught " + e + " in rCon initialization.");
@@ -166,46 +168,46 @@ public class MainCarController extends MIDlet implements ISwitchListener {
 
         }
     }
-    
-    private void writeToDatagram(CarPoint cp, Datagram dg){
-        try{
+
+    private void writeToDatagram(CarPoint cp, Datagram dg) {
+        try {
             dg.reset();
-        dg.writeUTF("CarPoint");
-        dg.writeFloat(cp.time);
-        dg.writeFloat(cp.LF);
-        dg.writeFloat(cp.RF);
-        dg.writeFloat(cp.LR);
-        dg.writeFloat(cp.RR);
-        dg.writeFloat(cp.distRight);
-        dg.writeFloat(cp.distLeft);
-        dg.writeFloat(cp.LT);
-        dg.writeFloat(cp.RT);
-        dg.writeFloat(cp.thetaRight);
-        dg.writeFloat(cp.thetaLeft);
-        dg.writeFloat(cp.theta);
-        dg.writeFloat(cp.distance);
-        dg.writeFloat(cp.turn);
-        dg.writeFloat(cp.velocity);
-        dg.writeFloat(cp.targetDist);
-        dg.writeFloat(cp.startTurn);
-        dg.writeFloat(cp.stopTurn);
-        dg.writeFloat(cp.targetTheta);
-        }
-        catch (IOException ex){
+            dg.writeUTF("CarPoint");
+            dg.writeFloat(cp.time);
+            dg.writeFloat(cp.LF);
+            dg.writeFloat(cp.RF);
+            dg.writeFloat(cp.LR);
+            dg.writeFloat(cp.RR);
+            dg.writeFloat(cp.distRight);
+            dg.writeFloat(cp.distLeft);
+            dg.writeFloat(cp.LT);
+            dg.writeFloat(cp.RT);
+            dg.writeFloat(cp.thetaRight);
+            dg.writeFloat(cp.thetaLeft);
+            dg.writeFloat(cp.theta);
+            dg.writeFloat(cp.distance);
+            dg.writeFloat(cp.turn);
+            dg.writeFloat(cp.velocity);
+            dg.writeFloat(cp.targetDist);
+            dg.writeFloat(cp.startTurn);
+            dg.writeFloat(cp.stopTurn);
+            dg.writeFloat(cp.targetTheta);
+        } catch (IOException ex) {
             System.out.println("IOexception " + ex + "in writeToDatagram.");
-    }
-    }
-    
-    private void transmitCarPoint(CarPoint cp) {
-        try{
-                    writeToDatagram(cp, dg);
-                    xmitConn.send(dg);
-                }
-             catch (IOException ex) {
-                System.out.println(ex);
-                System.out.println("IO exception in while block of transmit loop");
-            }
         }
+    }
+
+    private void transmitCarPoint(CarPoint cp, RadiogramConnection rc, Datagram dg) {
+        try {
+            dg = rc.newDatagram(rc.getMaximumLength());
+            writeToDatagram(cp, dg);
+            System.out.println("Sending carpoint! Time: " + System.currentTimeMillis());
+            rc.send(dg);
+        } catch (IOException ex) {
+            System.out.println(ex);
+            System.out.println("IO exception in while block of transmit loop");
+        }
+    }
 
     /**
      * BASIC STARTUP CODE *
@@ -215,8 +217,8 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         System.out.println("Hello, world");
         sw1.addISwitchListener(this);
         sw2.addISwitchListener(this);
-        IRDaemon d = new IRDaemon(irRightFront, irLeftFront, irRightRear, irLeftRear, CAR_LENGTH, CONFIDENCE_DISTANCE);
-        LEDaemon l = new LEDaemon(myLEDs, REVERSE_LEDS, CONFIDENCE_HIGH_CUTOFF, CONFIDENCE_CUTOFF_STEP, MAX_TRACKING_ANGLE);
+        IRDaemon IR_DAEMON = new IRDaemon(irRightFront, irLeftFront, irRightRear, irLeftRear, CAR_LENGTH, CONFIDENCE_DISTANCE);
+        LEDaemon LED_DAEMON = new LEDaemon(myLEDs, REVERSE_LEDS, CONFIDENCE_HIGH_CUTOFF, CONFIDENCE_CUTOFF_STEP, MAX_TRACKING_ANGLE);
         turnHard();
         BootloaderListenerService.getInstance().start();
 
@@ -225,65 +227,67 @@ public class MainCarController extends MIDlet implements ISwitchListener {
             myLEDs.getLED(i).setColor(LEDColor.GREEN);
         }
         Utils.sleep(500);
-        l.setAllOff();
+        LED_DAEMON.setAllOff();
 
         //velocityBlinker.setColor(LEDColor.BLUE);
         //progBlinker.setColor(LEDColor.BLUE);
 
-        
+
         boolean error = false;
+        int broadcastCounter = 0;
+        int skipCounter = 0;
 
         while (STOP != 1) {
-            
+
             //boolean timeoutError = robot.isTimeoutError();
             //int st = 0;
             int rl = 0;
             //if (!timeoutError) {
             //rl = robot.getVal(0);
             //rl = leftOrRight();
-            d.update();
-            
-            l.changeColors(d.thetaRight, d.thetaLeft, d.confidenceRF, d.confidenceLF, d.confidenceRR, d.confidenceLR);
-            String command = d.pickDirection();
-            setTurn = d.turnSuggest;
+            IR_DAEMON.update();
+
+            LED_DAEMON.changeColors(IR_DAEMON.thetaRight, IR_DAEMON.thetaLeft, IR_DAEMON.confidenceRF, IR_DAEMON.confidenceLF, IR_DAEMON.confidenceRR, IR_DAEMON.confidenceLR);
+            String command = IR_DAEMON.pickDirection();
+            setTurn = IR_DAEMON.turnSuggest;
             //d.report();
             //System.out.println("Suggested turn value: " + setTurn);
 
             //System.out.println("setting turn to: setTurn");
             //System.out.println("Turn servo set to: " + turnServo.getValue());
             //System.out.println(command);
-            if (command == "unknown"){
+            if (command == "unknown") {
                 driveSlow();
             }
             /*else if (command == "straight"){
-                setTurn = SERVO_CENTER_VALUE;
-            }
-            else if (command == "left"){
-                setTurn = SERVO_MAX_VALUE;
-            }
+             setTurn = SERVO_CENTER_VALUE;
+             }
+             else if (command == "left"){
+             setTurn = SERVO_MAX_VALUE;
+             }
             
-            else if (command == "slight-left"){
-                setTurn = 1750;
-            }
+             else if (command == "slight-left"){
+             setTurn = 1750;
+             }
             
-            else if (command == "slight-right"){
-                setTurn = 1250;
-            }
+             else if (command == "slight-right"){
+             setTurn = 1250;
+             }
             
-            else if (command == "tiny-left"){
-                setTurn = 1600;
-            }
+             else if (command == "tiny-left"){
+             setTurn = 1600;
+             }
             
-            else if (command == "tiny-right"){
-                setTurn = 1400;
-            }
+             else if (command == "tiny-right"){
+             setTurn = 1400;
+             }
             
-            else if (command == "right"){
-                setTurn = SERVO_MIN_VALUE;
-            }*/
-            
-            
-            
+             else if (command == "right"){
+             setTurn = SERVO_MIN_VALUE;
+             }*/
+
+
+
             //st = robot.getVal(1);
             /*if (error) {
              step1 = SERVO1_LOW_STEP;
@@ -292,22 +296,36 @@ public class MainCarController extends MIDlet implements ISwitchListener {
              //progBlinker.setColor(LEDColor.BLUE);
              error = false;
              }*/
-            
+
             //steer();
             turnHard();
-            if (command == "unknown"){
+            if (command == "unknown") {
                 driveSlow();
+            } else {
+                drive();
             }
-            else{
-            drive();}
             /*} else {
              velocityBlinker.setColor(LEDColor.RED);
              progBlinker.set
              Color(LEDColor.RED);
              error = true;
              }*/
-            CarPoint cp = d.getCarpoint(setTurn, setSpeed, startTurn, stopTurn);
-            transmitCarPoint(cp);
+            if (skipCounter == BROADCAST_POINT_SKIP) {
+                CarPoint cp = IR_DAEMON.getCarpoint(setTurn, setSpeed, startTurn, stopTurn);
+                transmitCarPoint(cp,broadcastConnections[broadcastCounter], broadcastDatagrams[broadcastCounter]);
+                if (broadcastCounter < BROADCAST_PORT_COUNT-1) {
+                    broadcastCounter++;
+                }
+                else {
+                    broadcastCounter = 0;
+                    }
+                skipCounter = 0;
+            }
+            else {
+                skipCounter++;
+            }
+            System.out.println("Counter: " + broadcastCounter + ", skipCounter: " + skipCounter);
+
             Utils.sleep(SAMPLE_TIME);
             if (STOP == 1) {
                 speedServo.setValue(1500);
@@ -417,40 +435,39 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         //servo1.setValue(0);
         turnServo.setValue(SERVO_CENTER_VALUE);
     }
-    
-    private void steer(){
+
+    private void steer() {
         updateServo(turnServo, setTurn, TURN_LOW_STEP);
         //System.out.println("Turning: " + setTurn);
     }
-    
-    private void turnHard(){
+
+    private void turnHard() {
         setServo(turnServo, setTurn);
         //System.out.println("Turning Hard: " + setTurn);
-                //System.out.println("SetTurn: " + setTurn);
-        if (setTurn < 1500){
+        //System.out.println("SetTurn: " + setTurn);
+        if (setTurn < 1500) {
             //System.out.println("****car sould be turning right");
-        }
-        else if (setTurn > 1500){
-                //System.out.println("***Car should be turning left");
-            }
-            else {
-               // System.out.println("Car should be going straight");
+        } else if (setTurn > 1500) {
+            //System.out.println("***Car should be turning left");
+        } else {
+            // System.out.println("Car should be going straight");
         }
     }
-    
-    private void drive(){
+
+    private void drive() {
         updateServo(speedServo, setSpeed, SPEED_LOW_STEP);
     }
-    
-    private void driveSlow(){
-        if (setSpeed < 1400){
-        updateServo(speedServo, slowSpeed, SPEED_HIGH_STEP);
-        }   
+
+    private void driveSlow() {
+        if (setSpeed < 1400) {
+            updateServo(speedServo, slowSpeed, SPEED_HIGH_STEP);
+        }
     }
-    
-    private void setServo(Servo target_servo, int target_value){
+
+    private void setServo(Servo target_servo, int target_value) {
         target_servo.setValue(target_value);
     }
+
     private void updateServo(Servo target_servo, int target_value, int acceleration) {
         int currentValue = target_servo.getValue();
         int newValue;
