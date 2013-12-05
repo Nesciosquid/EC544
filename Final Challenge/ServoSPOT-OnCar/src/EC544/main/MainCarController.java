@@ -125,7 +125,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     private long myAddr = 0;
     private int STOP = 0;
     private int BROADCAST_PORT_COUNT = 1;
-    private int BROADCAST_POINT_SKIP = 4;
+    private int BROADCAST_POINT_SKIP = 4; // Number of datapoints to skip (send 1 out of N)
     RadiogramConnection[] broadcastConnections = new RadiogramConnection[BROADCAST_PORT_COUNT];
     Datagram[] broadcastDatagrams = new Datagram[BROADCAST_PORT_COUNT];
 
