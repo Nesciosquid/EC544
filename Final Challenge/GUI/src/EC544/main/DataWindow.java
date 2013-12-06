@@ -22,7 +22,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-package org.sunspotworld.demo;
+package EC544.main;
 
 import java.awt.Color;
 import java.awt.Graphics;

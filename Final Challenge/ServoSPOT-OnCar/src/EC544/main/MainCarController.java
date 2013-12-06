@@ -125,9 +125,11 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     private long myAddr = 0;
     private int STOP = 0;
     private int BROADCAST_PORT_COUNT = 1;
-    private int BROADCAST_POINT_SKIP = 4;
+    private int BROADCAST_POINT_SKIP = 3;
     RadiogramConnection[] broadcastConnections = new RadiogramConnection[BROADCAST_PORT_COUNT];
     Datagram[] broadcastDatagrams = new Datagram[BROADCAST_PORT_COUNT];
+    IRDaemon IR_DAEMON = new IRDaemon(CAR_LENGTH, CONFIDENCE_DISTANCE);
+    LEDaemon LED_DAEMON = new LEDaemon(myLEDs, REVERSE_LEDS, CONFIDENCE_HIGH_CUTOFF, CONFIDENCE_CUTOFF_STEP, MAX_TRACKING_ANGLE);
 
     //Initialize RadiogramConnections.
     //Makes as many as BROADCST_PORT_COUNT specifies. 
@@ -137,7 +139,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         try {
             // Open up a broadcast connection to the host port
             // where the 'on Desktop' portion of this demo is listening
-            for (int i = 0; i < BROADCAST_PORT_COUNT; i++){
+            for (int i = 0; i < BROADCAST_PORT_COUNT; i++) {
                 broadcastConnections[i] = (RadiogramConnection) Connector.open("radiogram://broadcast:" + (HOST_PORT + i));
                 broadcastDatagrams[i] = broadcastConnections[i].newDatagram(broadcastConnections[i].getMaximumLength());
             }
@@ -149,7 +151,6 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         }
     }
 
-    
     //Constructor, currently not used
     public MainCarController() {
     }
@@ -203,17 +204,57 @@ public class MainCarController extends MIDlet implements ISwitchListener {
             System.out.println("IOexception " + ex + "in writeToDatagram.");
         }
     }
+    
+        private void writeToDatagram(SmallPoint sp, Datagram dg) {
+        try {
+            dg.reset();
+            dg.writeByte(sp.booleansToUnsignedInt());
+            dg.writeByte(sp.toUnsignedInt(sp.leftFront));
+            dg.writeByte(sp.toUnsignedInt(sp.rightFront));
+            dg.writeByte(sp.toUnsignedInt(sp.leftRear));
+            dg.writeByte(sp.toUnsignedInt(sp.rightRear));
+            dg.writeByte(sp.servoValueToUnsignedInt(sp.setTurn));
+            dg.writeByte(sp.servoValueToUnsignedInt(sp.setSpeed));
+            dg.writeDouble(sp.time);
+ 
+        } catch (IOException ex) {
+            System.out.println("IOexception " + ex + "in writeToDatagram.");
+        }
+    }
 
     //Write a CarPoint object into a datagram and send it over a connection.
     private void transmitCarPoint(CarPoint cp, RadiogramConnection rc, Datagram dg) {
         try {
             dg = rc.newDatagram(rc.getMaximumLength());
             writeToDatagram(cp, dg);
+            
             //System.out.println("Sending carpoint! Time: " + System.currentTimeMillis());
             rc.send(dg);
         } catch (IOException ex) {
             System.out.println(ex);
             System.out.println("IO exception in while block of transmit loop");
+        }
+    }
+
+    private void transmitSmallPoint(SmallPoint sp, RadiogramConnection rc, Datagram dg) {
+        try {
+            dg = rc.newDatagram(rc.getMaximumLength());
+            writeToDatagram(sp, dg);
+            sp.printPoint();
+            //System.out.println("Sending carpoint! Time: " + System.currentTimeMillis());
+            rc.send(dg);
+        } catch (IOException ex) {
+            System.out.println(ex);
+            System.out.println("IO exception in while block of transmit loop");
+        }
+    }
+
+    private void updateIR() {
+        try {
+            IR_DAEMON.update(irLeftFront.getVoltage(), irRightFront.getVoltage(), irLeftRear.getVoltage(), irRightRear.getVoltage()); //Does a LOT of calculatoins, see IR_DAEMON class!
+            LED_DAEMON.changeColors(IR_DAEMON.thetaRight, IR_DAEMON.thetaLeft, IR_DAEMON.confidenceRF, IR_DAEMON.confidenceLF, IR_DAEMON.confidenceRR, IR_DAEMON.confidenceLR);
+        } catch (IOException ex) {
+            System.out.println("IOException " + ex + " in updateIR()");
         }
     }
 
@@ -226,50 +267,46 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         System.out.println("Hello, world");
         sw1.addISwitchListener(this);
         sw2.addISwitchListener(this);
-        
-        IRDaemon IR_DAEMON = new IRDaemon(irRightFront, irLeftFront, irRightRear, irLeftRear, CAR_LENGTH, CONFIDENCE_DISTANCE);
-        LEDaemon LED_DAEMON = new LEDaemon(myLEDs, REVERSE_LEDS, CONFIDENCE_HIGH_CUTOFF, CONFIDENCE_CUTOFF_STEP, MAX_TRACKING_ANGLE);
+
         turnHard();
-        
+
         for (int i = 0; i < myLEDs.size(); i++) {
             myLEDs.setOn();
             myLEDs.getLED(i).setColor(LEDColor.GREEN);
         }
-        
+
         Utils.sleep(500);
         LED_DAEMON.setAllOff();
         int broadcastCounter = 0; //Used with BROADCAST_PORT_COUNT
         int skipCounter = 0; // Used to skip sending datapoints to reduce network traffic
 
-        while (STOP != 1) { // Currently mapped to sw2
+        while (STOP != 1) { // Runs this loop until the program ends, currently mapped to sw2
 
-            IR_DAEMON.update(); //Does a LOT of calculatoins, see IR_DAEMON class!
-            LED_DAEMON.changeColors(IR_DAEMON.thetaRight, IR_DAEMON.thetaLeft, IR_DAEMON.confidenceRF, IR_DAEMON.confidenceLF, IR_DAEMON.confidenceRR, IR_DAEMON.confidenceLR);
+            updateIR();
             String command = IR_DAEMON.pickDirection(); // You MUST call pickDirection(); or IR_DAEMON will give you the wrong response for turnSuggest!
             setTurn = IR_DAEMON.turnSuggest;
-            
+
             //If the IR_DAEMON can't tell you where to go, you should slow down...
             if (command.equals("unknown")) {
                 driveSlow();
-            }
-            else {
+            } else {
                 drive();
             }
             turnHard();
 
             //Used for transmitting to different ports, and skipping transmission of datapoints
             if (skipCounter == BROADCAST_POINT_SKIP) {
-                CarPoint cp = IR_DAEMON.getCarpoint(setTurn, setSpeed, startTurn, stopTurn);
-                transmitCarPoint(cp,broadcastConnections[broadcastCounter], broadcastDatagrams[broadcastCounter]);
-                if (broadcastCounter < BROADCAST_PORT_COUNT-1) {
+                //CarPoint cp = IR_DAEMON.getCarpoint(setTurn, setSpeed, startTurn, stopTurn);
+                SmallPoint sp = IR_DAEMON.getSmallPoint(setTurn, setSpeed, System.currentTimeMillis());
+                //transmitCarPoint(cp, broadcastConnections[broadcastCounter], broadcastDatagrams[broadcastCounter]);
+                transmitSmallPoint(sp, broadcastConnections[broadcastCounter], broadcastDatagrams[broadcastCounter]);
+                if (broadcastCounter < BROADCAST_PORT_COUNT - 1) {
                     broadcastCounter++;
-                }
-                else {
+                } else {
                     broadcastCounter = 0;
-                    }
+                }
                 skipCounter = 0;
-            }
-            else {
+            } else {
                 skipCounter++;
             }
 
@@ -279,14 +316,14 @@ public class MainCarController extends MIDlet implements ISwitchListener {
             }
         }
     }
-    
+
     //Update turn servo to approach current setTurn value
     private void updateSteer() {
         updateServo(turnServo, setTurn, TURN_LOW_STEP);
     }
 
     //sets the turn servo to the current setTurn value
-    private void turnHard() { 
+    private void turnHard() {
         setServo(turnServo, setTurn);
     }
 
@@ -297,7 +334,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
 
     //Update the car's speed to approach the slowSpeed setting
     private void driveSlow() {
-            updateServo(speedServo, slowSpeed, SPEED_HIGH_STEP);
+        updateServo(speedServo, slowSpeed, SPEED_HIGH_STEP);
     }
 
     //Set servo to the target value.

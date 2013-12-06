@@ -4,10 +4,7 @@
  */
 package EC544.main;
 
-import com.sun.spot.resources.transducers.IAnalogInput;
-import com.sun.spot.sensorboard.EDemoBoard;
 import com.sun.squawk.util.MathUtils;
-import java.io.IOException;
 
 /**
  *
@@ -17,10 +14,6 @@ public class IRDaemon {
     // IR sensors
 
     private boolean isLeftPreferred = true;
-    private IAnalogInput irRightFront;
-    private IAnalogInput irLeftFront;
-    private IAnalogInput irRightRear;
-    private IAnalogInput irLeftRear;
     // Trig coefficients
     private boolean dynamicHallwaySize = false;
     private double wallNear = 15.0;
@@ -82,34 +75,37 @@ public class IRDaemon {
     double maxAngleFactor = 1.0;
     double maxHallConfidence = 1.25; // if new hall distance is > 1.25 of average, beware!
     double maxConfidenceAngle = 30;
-    
-    public CarPoint getCarpoint(int turn, int setSpeed, boolean startTurn, boolean stopTurn){
+
+    public CarPoint getCarpoint(int turn, int setSpeed, boolean startTurn, boolean stopTurn) {
         CarPoint cp = new CarPoint();
         cp.time = System.currentTimeMillis();
-      cp.LF = (float)readingLF;
-      cp.RF = (float)readingRF;
-      cp.LR = (float)readingLR;
-      cp.RR = (float)readingRR;
-      cp.distRight = (float)distanceAvgR;
-      cp.distLeft = (float)distanceAvgL;
-      cp.LT = (float)calcTrust(confidenceLF,confidenceLR);
-      cp.RT = (float)calcTrust(confidenceRF,confidenceRR);
-      cp.thetaRight = (float)thetaRight;
-      cp.thetaLeft = (float)thetaLeft;
-      cp.theta = (float)avgTheta;
-      cp.distance = (float)avgDist; // arbitrary for simulated data
-      cp.turn = (float)turn;
-      cp.velocity = (float)setSpeed;
-      cp.targetDist = (float)targetDistance;
-      if (startTurn)
-          cp.startTurn = 1.0f;
-     
-      else cp.startTurn = 0.0f;
-      if (stopTurn)
-          cp.stopTurn = 1.0f;
-      else cp.stopTurn = 0.0f;
-      cp.targetTheta = (float)avgTarget;
-        
+        cp.LF = (float) readingLF;
+        cp.RF = (float) readingRF;
+        cp.LR = (float) readingLR;
+        cp.RR = (float) readingRR;
+        cp.distRight = (float) distanceAvgR;
+        cp.distLeft = (float) distanceAvgL;
+        cp.LT = (float) calcTrust(confidenceLF, confidenceLR);
+        cp.RT = (float) calcTrust(confidenceRF, confidenceRR);
+        cp.thetaRight = (float) thetaRight;
+        cp.thetaLeft = (float) thetaLeft;
+        cp.theta = (float) avgTheta;
+        cp.distance = (float) avgDist; // arbitrary for simulated data
+        cp.turn = (float) turn;
+        cp.velocity = (float) setSpeed;
+        cp.targetDist = (float) targetDistance;
+        if (startTurn) {
+            cp.startTurn = 1.0f;
+        } else {
+            cp.startTurn = 0.0f;
+        }
+        if (stopTurn) {
+            cp.stopTurn = 1.0f;
+        } else {
+            cp.stopTurn = 0.0f;
+        }
+        cp.targetTheta = (float) avgTarget;
+
         return cp;
     }
 
@@ -302,50 +298,43 @@ public class IRDaemon {
         initRecents();
     }
 
-    public IRDaemon(IAnalogInput RF, IAnalogInput LF, IAnalogInput RR, IAnalogInput LR) {
-        irRightFront = RF;
-        irLeftFront = LF;
-        irRightRear = RR;
-        irLeftRear = LR;
-        initRecents();
-    }
-
-    public IRDaemon(IAnalogInput RF, IAnalogInput LF, IAnalogInput RR, IAnalogInput LR, double distance, double conf) {
-        irRightFront = RF;
-        irLeftFront = LF;
-        irRightRear = RR;
-        irLeftRear = LR;
+    public IRDaemon(double distance, double conf) {
         sensorDistance = distance;
         confidenceDistance = conf;
         initRecents();
     }
 
-    public void update() {
-        readSensors();
+    public void update(double LF_volts, double RF_volts, double LR_volts, double RR_volts) {
+        readingLF = getDistance(LF_volts);
+        readingRF = getDistance(RF_volts);
+        readingLR = getDistance(LR_volts);
+        readingRR = getDistance(RR_volts);
+
         updateAngles();
         updateDistance();
         updateConfidence();
     }
 
-    private double getDistance(IAnalogInput analog) {
-        double volts = 0;
-        try {
-            volts = analog.getVoltage();
-        } catch (IOException e) {
-            System.err.println(e);
+    public double getVolts(double old_distance_value) {
+        return (18.67 / old_distance_value) - 0.167;
+    }
+
+    //Assumes all boolean smallPoint variables are false.
+    public SmallPoint getSmallPoint(int turnSetting, int speedSetting, double time) {
+        SmallPoint out = new SmallPoint(readingLF, readingRF, readingLR, readingRR, turnSetting, speedSetting);
+        out.time = time;
+        if (!out.isASmallPoint()) {
+            System.out.println("Created an invalid SmallPoint!" + out.booleansToUnsignedInt());
         }
+        return out;
+    }
+
+    private double getDistance(double volts) {
         return 18.67 / (volts + 0.167);
     }
 
     private double toDegrees(double thetaRad) {
         return thetaRad * 57.2957795;
-    }
-
-    private void readSensors() {
-        readingLF = getDistance(irLeftFront);
-        readingRF = getDistance(irRightFront);
-        readingLR = getDistance(irLeftRear);
-        readingRR = getDistance(irRightRear);
     }
 
     private void updateAngles() {
@@ -365,7 +354,7 @@ public class IRDaemon {
     public void report() {
 
         System.out.println("Distance from left wall: " + -distanceAvgL + ", confidence: " + confidenceAvgL);
-      
+
         System.out.println("Distance from right wall: " + distanceAvgR + ", confidence: " + confidenceAvgR);
         System.out.println("Average distance: " + avgDist);
         //System.out.println("Average hall size:" + avgHall);
@@ -409,13 +398,14 @@ public class IRDaemon {
         int trust = calcTrust(confidenceLF, confidenceLR);
         //System.out.println("Left trust:" + trust);
         return trust;
-        
+
     }
 
     private int rightTrust() {
         int trust = calcTrust(confidenceRF, confidenceRR);
         //System.out.println("Right trust:" + trust);
-        return trust;    }
+        return trust;
+    }
 
     private boolean isCloseToWall(double distance) {
         if ((Math.abs(distance) < wallNear)) {
@@ -503,9 +493,9 @@ public class IRDaemon {
         int R = rightTrust();
         if (L == 0 && R == 0) {
             return "unknown";
-        } else if (L > R) {      
+        } else if (L > R) {
             isLeftPreferred = true;
-             if (R == 0) {
+            if (R == 0) {
                 targetDistance = closeDistance;
             } else {
                 targetDistance = idealDistance;
@@ -514,12 +504,12 @@ public class IRDaemon {
             return "trust left";
         } else if (R > L) {
             isLeftPreferred = false;
-             if (L == 0) {
+            if (L == 0) {
                 targetDistance = closeDistance;
             } else {
                 targetDistance = idealDistance;
             }
-             rightTurn(targetDistance);
+            rightTurn(targetDistance);
             return "trust right";
         } else if (L == 0 && R == 0) {
             return "unknown";
@@ -550,18 +540,19 @@ public class IRDaemon {
         }
 
     }
-    
-    private boolean isWayTooBig(double theta_rad){
+
+    private boolean isWayTooBig(double theta_rad) {
         double theta_deg = toDegrees(theta_rad);
-        if (theta_deg > maxConfidenceAngle + 15 || theta_deg < -maxConfidenceAngle - 15){
+        if (theta_deg > maxConfidenceAngle + 15 || theta_deg < -maxConfidenceAngle - 15) {
             return true;
+        } else {
+            return false;
         }
-        else return false;
     }
-    
+
     private boolean isTooDifferent(double currentValue, double[] recentValues) {
         double sd = stDev(recentValues);
-        if (sd == 0){
+        if (sd == 0) {
             sd = average(recentValues) / 4; // in case the arrays have dummy values!
         }
 
@@ -595,17 +586,17 @@ public class IRDaemon {
         //if (isTooDifferent(newHallSize, recentHalls)) {
         //    System.out.println("Hall size change detected! Expect " + avgHall + ", saw " + newHallSize);
         /*    if (isTooDifferent(thetaLeft, recentThetas) && !isTooDifferent(thetaRight, recentThetas)) {
-                System.out.println("ThetaLeft ("+thetaLeft+") different from avgTheta("+avgTheta+")");
-                ruinLeftConfidence();
-            }
+         System.out.println("ThetaLeft ("+thetaLeft+") different from avgTheta("+avgTheta+")");
+         ruinLeftConfidence();
+         }
          else {
-            if (isTooDifferent(thetaRight, recentThetas) && !isTooDifferent(thetaLeft, recentThetas)) {
-                System.out.println("ThetaRight ("+thetaRight+") different from avgTheta("+avgTheta+")");
+         if (isTooDifferent(thetaRight, recentThetas) && !isTooDifferent(thetaLeft, recentThetas)) {
+         System.out.println("ThetaRight ("+thetaRight+") different from avgTheta("+avgTheta+")");
 
-                ruinRightConfidence();
-            }
-        }
-        */
+         ruinRightConfidence();
+         }
+         }
+         */
         if (isTooBig(thetaLeft) && !isTooBig(thetaRight) || isWayTooBig(thetaLeft)) {
             //System.out.println("thetaLeft too big, thetaRight might be OK: " + toDegrees(thetaLeft) + " vs. " + maxConfidenceAngle);
             ruinLeftConfidence();
@@ -613,7 +604,7 @@ public class IRDaemon {
             //System.out.println("ThetaRight too big, thetaLeft might be OK"  + toDegrees(thetaRight) + " vs. " + maxConfidenceAngle);
             ruinRightConfidence();
         }
-    //}
+        //}
     }
 
     private double calcConfidence(double reading) {

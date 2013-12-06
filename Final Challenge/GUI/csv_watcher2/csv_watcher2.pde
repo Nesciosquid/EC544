@@ -4,7 +4,7 @@ double CAR_LENGTH = 10.0; // in 'IR' units, whatever those are
 double CONFIDENCE_DISTANCE = 20.0; // in 'IR' units
 IRDaemon IR_DAEMON = new IRDaemon(CAR_LENGTH, CONFIDENCE_DISTANCE);
 /**************************/
-
+SmallPoint sp;
 BufferedReader reader;
 Scrubber timeScrubber;
 String[] readouts;
@@ -41,8 +41,8 @@ void setup() {
   scrubbing = false;
   loop = false;
   // Open the file from the createWriter() example
-  //reader = createReader("test2.csv");    
-  reader = createReader("../live.csv");   
+  reader = createReader("12-6-freakouts.csv");    
+  //reader = createReader("../live.csv");   
   //size(600,600);
   size(displayWidth, displayHeight);
   conversionFactor = 2.0 + 3.0 *width / displayWidth;
@@ -50,11 +50,11 @@ void setup() {
   scrubber_width = width-scrubber_inset*2;
   scrubber_y = height-scrubber_inset*2;
   smooth();
-  frameRate(30);
+  frameRate(5);
   hall_left = (width/4);
   hall_right = width - (width/4);
   lastSize = 0;
-  csvWidth = 19;
+  csvWidth = 8;
 
   maxVelocity = 8.0 * conversionFactor;
   conversionFactor = 1.0 + 4.0 *width / displayWidth;
@@ -140,6 +140,12 @@ CarPoint processNewPoint(CarPoint oldPoint){
   IR_DAEMON.update(IR_DAEMON.getVolts(oldPoint.LF), IR_DAEMON.getVolts(oldPoint.RF), IR_DAEMON.getVolts(oldPoint.LR), IR_DAEMON.getVolts(oldPoint.RR));
   IR_DAEMON.pickDirection();
   return IR_DAEMON.getCarpoint((int)oldPoint.turn, (int)oldPoint.velocity, false, false);
+}
+
+CarPoint processNewPoint(SmallPoint sp){
+  IR_DAEMON.update(IR_DAEMON.getVolts(sp.leftFront), IR_DAEMON.getVolts(sp.rightFront), IR_DAEMON.getVolts(sp.leftRear), IR_DAEMON.getVolts(sp.rightRear));
+  IR_DAEMON.pickDirection();
+  return IR_DAEMON.getCarpoint((int)sp.setTurn, (int)sp.setSpeed, false, false);
 }
 
 void mousePressed() {
@@ -232,11 +238,87 @@ boolean overScrubber(){
   else return false;
 }
 
+SmallPoint processLineToSmallPoint(String[] currentLine) {
+        int LF = 0;
+        int RF = 0;
+        int LR = 0;
+        int RR = 0;
+        int turn = 0;
+        int speed = 0;
+        int booleans = 0;
+        double time = 0.0;
+        time = Double.parseDouble(currentLine[0]);
+        LF = Integer.parseInt(currentLine[1]);
+                    RF = Integer.parseInt(currentLine[2]);
+                    LR = Integer.parseInt(currentLine[3]);
+                    RR = Integer.parseInt(currentLine[4]);
+                    turn = Integer.parseInt(currentLine[5]);
+                    speed = Integer.parseInt(currentLine[6]);
+                    booleans = Integer.parseInt(currentLine[7]);
+            
+        
+        sp = new SmallPoint(LF, RF, LR, RR, turn, speed);
+        sp.setBooleans(booleans);
+        sp.time = time;
+        return sp;
+    }
+    
+    CarPoint processLineToCarpoint(String[] currentLine) {
+        CarPoint cp = new CarPoint();
+        for (int i = 0; i < currentLine.length; i++) {
+            switch (i) {
+                case 0:
+                    cp.time = storeData(currentLine[i]);
+                case 1:
+                    cp.LF = storeData(currentLine[i]);
+                case 2:
+                    cp.RF = storeData(currentLine[i]);
+                case 3:
+                    cp.LR = storeData(currentLine[i]);
+                case 4:
+                    cp.RR = storeData(currentLine[i]);
+                case 5:
+                    cp.LT = storeData(currentLine[i]);
+                case 6:
+                    cp.RT = storeData(currentLine[i]);
+                case 7:
+                    cp.distRight = storeData(currentLine[i]);
+                case 8:
+                    cp.distLeft = storeData(currentLine[i]);
+                case 9:
+                    cp.thetaRight = storeData(currentLine[i]);
+                case 10:
+                    cp.thetaLeft = storeData(currentLine[i]);
+                case 11:
+                    cp.theta = storeData(currentLine[i]);
+                case 12:
+                    cp.distance = storeData(currentLine[i]);
+                case 13:
+                    cp.turn = storeData(currentLine[i]);
+                case 14:
+                    cp.velocity = storeData(currentLine[i]);
+                case 15:
+                    cp.targetDist = storeData(currentLine[i]);
+                case 16:
+                    cp.startTurn = storeData(currentLine[i]);
+                case 17:
+                    cp.stopTurn = storeData(currentLine[i]);
+                case 18:
+                    cp.targetTheta = storeData(currentLine[i]);
+            }
+        }
+        return cp;
+    }
+                            
+
+
+
+    
+    
     void checkData() {
         String thisLine;
         String output;
         String[] currentLine;
-        CarPoint cp;
 
         try {
             while ((thisLine = reader.readLine()) != null) {
@@ -254,50 +336,9 @@ boolean overScrubber(){
                     System.out.println(output);
                 } else {
                     if (currentLine.length == csvWidth) {
-                        cp = new CarPoint();
-                        for (int i = 0; i < currentLine.length; i++) {
-                            switch (i) {
-                                case 0:
-                                    cp.time = storeData(currentLine[i]);
-                                    case 1:
-                                        cp.LF = storeData(currentLine[i]);
-                                    case 2:
-                                        cp.RF = storeData(currentLine[i]);
-                                    case 3:
-                                        cp.LR = storeData(currentLine[i]);
-                                    case 4:
-                                        cp.RR = storeData(currentLine[i]);
-                                    case 5:
-                                        cp.LT = storeData(currentLine[i]);
-                                    case 6:
-                                        cp.RT = storeData(currentLine[i]);
-                                    case 7:
-                                        cp.distRight = storeData(currentLine[i]);
-                                    case 8:
-                                        cp.distLeft = storeData(currentLine[i]);
-                                    case 9:
-                                        cp.thetaRight = storeData(currentLine[i]);
-                                    case 10:
-                                        cp.thetaLeft = storeData(currentLine[i]);
-                                    case 11:
-                                        cp.theta = storeData(currentLine[i]);
-                                    case 12:
-                                        cp.distance = storeData(currentLine[i]);
-                                    case 13:
-                                        cp.turn = storeData(currentLine[i]);
-                                    case 14:
-                                        cp.velocity = storeData(currentLine[i]);
-                                    case 15:
-                                        cp.targetDist = storeData(currentLine[i]);
-                                    case 16:
-                                        cp.startTurn = storeData(currentLine[i]);
-                                    case 17:
-                                        cp.stopTurn = storeData(currentLine[i]);
-                                    case 18:
-                                        cp.targetTheta = storeData(currentLine[i]);
-                                }
-                            }
-                            allPoints.add(cp);
+                        //allPoints.add(processLineToCarpoint(currentLine));
+                        SmallPoint current = processLineToSmallPoint(currentLine);
+                        allPoints.add(processNewPoint(current));
                         }
                     }
                 }
@@ -810,7 +851,7 @@ class IRSensor{
         noStroke();
         noFill();
     }
-      text(read,xpos,ypos);
+      text((int)read,xpos,ypos);
   }
   
   int calcColor(int trust){

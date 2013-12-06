@@ -21,7 +21,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
-package org.sunspotworld.demo;
+package EC544.main;
 
 import com.sun.spot.io.j2me.radiogram.*;
 import com.sun.spot.peripheral.radio.IPacketQualityListener;
@@ -43,7 +43,7 @@ import java.io.*;
  *
  * @author Vipul Gupta modified Ron Goldman
  */
-public class TempsensorHostApplication {
+public class CarDataReceiver {
 
     // Configuration variables for destination port, sampling interval
     private static final int HOST_PORT = 42;
@@ -68,7 +68,8 @@ public class TempsensorHostApplication {
     private HashMap temp_offets = new HashMap();
     private double tp = 0.0;
     private HashMap temp_scales = new HashMap();
-    private ArrayList<CarPoint> outPoints = new ArrayList<CarPoint>();
+    //private ArrayList<CarPoint> outPoints = new ArrayList<CarPoint>();
+    private ArrayList<SmallPoint> outPoints = new ArrayList<SmallPoint>();
     private Listener listen = new Listener();
     private int channelIndex;
     private int RECEIVE_PORT_COUNT = 1;
@@ -97,11 +98,11 @@ public class TempsensorHostApplication {
 
             while (outPoints.size() > 0) {
                 System.out.println("in write loop, " + outPoints.size());
-                System.out.println("Adding carpoint to CSV");
+                System.out.println("Adding cpoint to CSV");
                 out.addCSVLine(outPoints.get(0).toString());
                 logger.addCSVLine(outPoints.get(0).toString());
                 outPoints.remove(0);
-                
+
             }
             try {
                 Thread.sleep(10);
@@ -110,6 +111,31 @@ public class TempsensorHostApplication {
 
             }
         }
+    }
+
+    private SmallPoint toSmallPoint(Datagram dg, int booleans) {
+        SmallPoint sp = null;
+        try {
+            int LF = dg.readUnsignedByte();
+            int RF = dg.readUnsignedByte();
+            int LR = dg.readUnsignedByte();
+            int RR = dg.readUnsignedByte();
+            int setTurn = dg.readUnsignedByte();
+            int setSpeed = dg.readUnsignedByte();
+            double time = dg.readDouble();
+            sp = new SmallPoint(LF, RF, LR, RR, setTurn * 10, setSpeed * 10);
+            sp.time = time;
+            System.out.println("Booleans in toSmallPoint: " + booleans);
+            System.out.println("setTurn in toSmallPoint: " + setTurn + ", setTurn * 10: " + setTurn*10);
+            System.out.println("If it was signed, setTurn would be: " + SmallPoint.toUnsignedInt(setTurn));
+            System.out.println("If it was unsigned, setTurn would be: " + SmallPoint.convertUnsignedInt(setTurn));
+            System.out.println("setSpeed in toSmallPoint: " + setSpeed + ", setSpeed * 10: " + setSpeed*10);
+            sp.setBooleans(booleans);
+        } catch (IOException ex) {
+            System.out.println("IOexception " + ex + " in toSmallPoint!");
+        }
+
+        return sp;
     }
 
     private CarPoint toCarPoint(Datagram dg) {
@@ -147,7 +173,7 @@ public class TempsensorHostApplication {
     //This is for receiving data and draw
     private void run() throws Exception {
         RadioPacketDispatcher.getInstance().registerPacketQualityListener(listen);
-        String headerLine = "time,LF,RF,LR,RR,LT,RT,distRight,distLeft,thetaRight,thetaLeft,theta,distance,turn,velocity,targetDist,startTurn,stopTurn,targetTheta";
+        String headerLine = SmallPoint.headerRow();
         logger.initCSV(headerLine);
         out.initCSV(headerLine);
         new Thread() {
@@ -158,13 +184,13 @@ public class TempsensorHostApplication {
 
         //------ This part does not need to modify. dg is the received package.---------//
         try {
-            for (int i = 0; i < RECEIVE_PORT_COUNT; i++){
-            // Open up a server-side broadcast radiogram connection
-            // to listen for sensor readings being sent by different SPOTs
-            allConnections[i] = (RadiogramConnection) Connector.open("radiogram://:" + (HOST_PORT+i));
-            allDatagrams[i] =  allConnections[i].newDatagram(allConnections[i].getMaximumLength());
+            for (int i = 0; i < RECEIVE_PORT_COUNT; i++) {
+                // Open up a server-side broadcast radiogram connection
+                // to listen for sensor readings being sent by different SPOTs
+                allConnections[i] = (RadiogramConnection) Connector.open("radiogram://:" + (HOST_PORT + i));
+                allDatagrams[i] = allConnections[i].newDatagram(allConnections[i].getMaximumLength());
             }
-            
+
         } catch (Exception e) {
             System.err.println("setUp caught " + e.getMessage());
             throw e;
@@ -175,20 +201,20 @@ public class TempsensorHostApplication {
         // Main data collection loop
         //This part is worth attention
         //Hashtable<String, Data> Inf = new Hashtable<String, Data>();
-        
-        for (int j = 0; j < RECEIVE_PORT_COUNT; j++){
+
+        for (int j = 0; j < RECEIVE_PORT_COUNT; j++) {
             channelIndex = j;
-            System.out.println("Channel index:" + j );
+            System.out.println("Channel index:" + j);
             new Thread() {
-            public void run() {
-                System.out.println("Started receive loop: " + channelIndex);
-                receiveLoop(allConnections[channelIndex], allDatagrams[channelIndex], channelIndex);
-                
-            }
-        }.start();
+                public void run() {
+                    System.out.println("Started receive loop: " + channelIndex);
+                    receiveLoop(allConnections[channelIndex], allDatagrams[channelIndex], channelIndex);
+
+                }
+            }.start();
             Thread.sleep(50);
         }
-        
+
         System.out.println("Test after receive loops");
 
     }
@@ -206,29 +232,39 @@ public class TempsensorHostApplication {
                 System.out.println("Got datagram in loop: " + number);
                 double timepoint = System.currentTimeMillis();
                 String node = dg.getAddress(); // read address of the Spot that sent the datagram
-                String firstLine = "";
+                //String firstLine = "";
+                int firstByte = 0;
                 if (dg.getLength() != 0) {
-                    firstLine = dg.readUTF();
-                }
-                else {
+                    //firstLine = dg.readUTF();
+                    firstByte = dg.readUnsignedByte();
+                    System.out.println("Firstbyte: " + firstByte);
+                } else {
                     System.out.println("Datagram length = 0!");
                 }
 
-                if (firstLine.equals("CarPoint")) {
-                    CarPoint cp = toCarPoint(dg);
-                    //logger.addCSVLine(cp.toString());
+                /*if (firstLine.equals("CarPoint")) {
+                 CarPoint cp = toCarPoint(dg);
+                 //logger.addCSVLine(cp.toString());
 
-                    outPoints.add(cp);
+                 outPoints.add(cp);
 
+                 }*/
+
+                if (SmallPoint.checkBooleans(firstByte)) {
+                    SmallPoint sp = toSmallPoint(dg, firstByte);
+                    outPoints.add(sp);
+                    sp.printPoint();
                 } else {
-                    System.out.println("Packet of unknown type: " + firstLine);
+                    System.out.println("Received packet of unknown type!");
                 }
+
+
                 //System.out.println("Got carpoint, " + outPoints.size() + "in queue:  "+ System.currentTimeMillis());
                 System.out.println("Receiving took: " + (System.currentTimeMillis() - tp) + " milliseconds, Processing took: " + (System.currentTimeMillis() - timepoint) + "milliseconds.");
                 System.out.println("Datagram received at" + timepoint + ", Datagram size: " + dg.getLength());
                 tp = System.currentTimeMillis();
-            
-            }catch (Exception e) {
+
+            } catch (Exception e) {
                 System.err.println("Caught " + e + " while reading sensor samples.");
 
             }
@@ -245,7 +281,7 @@ public class TempsensorHostApplication {
         // register the application's name with the OTA Command server & start OTA running
         OTACommandServer.start("TempsensorHostApplication");
 
-        TempsensorHostApplication app = new TempsensorHostApplication();
+        CarDataReceiver app = new CarDataReceiver();
         app.setup();
         app.run();
     }

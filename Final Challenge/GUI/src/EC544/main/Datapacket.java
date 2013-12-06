@@ -2,7 +2,7 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-package org.sunspotworld.demo;
+package EC544.main;
 import java.sql.Timestamp;
 import java.util.*;
 
