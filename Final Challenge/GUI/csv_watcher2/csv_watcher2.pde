@@ -2,7 +2,7 @@
 /*IR_DAEMON Constants*/
 double CAR_LENGTH = 10.0; // in 'IR' units, whatever those are
 double CONFIDENCE_DISTANCE = 20.0; // in 'IR' units
-IRDaemon IR_DAEMON = new IRDaemon(CAR_LENGTH, CONFIDENCE_DISTANCE);
+IRDaemon IR_DAEMON = new IRDaemon();
 /**************************/
 SmallPoint sp;
 BufferedReader reader;
@@ -41,8 +41,8 @@ void setup() {
   scrubbing = false;
   loop = false;
   // Open the file from the createWriter() example
-  reader = createReader("12-6-freakouts.csv");    
-  //reader = createReader("../live.csv");   
+  //reader = createReader("12-6-freakouts.csv");    
+  reader = createReader("../live.csv");   
   //size(600,600);
   size(displayWidth, displayHeight);
   conversionFactor = 2.0 + 3.0 *width / displayWidth;
@@ -105,11 +105,12 @@ void draw() {
   }
   }
     
-  if (currentPoint != null){
+  if (currentPoint != null && playback == true){
   CarPoint newPoint = processNewPoint(currentPoint);
   
   theCar.updateCar(newPoint);
   theFloor.updateFloor(newPoint, theCar);
+  }
   
   fill(255);
   rectMode(CORNERS);
@@ -125,7 +126,7 @@ void draw() {
   med.display();
   slow.display();
   }
-}
+
 
 void printAllPoints() {
   if (allPoints.size() != lastSize){
@@ -137,13 +138,15 @@ void printAllPoints() {
 }
 
 CarPoint processNewPoint(CarPoint oldPoint){
-  IR_DAEMON.update(IR_DAEMON.getVolts(oldPoint.LF), IR_DAEMON.getVolts(oldPoint.RF), IR_DAEMON.getVolts(oldPoint.LR), IR_DAEMON.getVolts(oldPoint.RR));
+  IR_DAEMON.updateReads(IR_DAEMON.getOldVolts(oldPoint.LF), IR_DAEMON.getOldVolts(oldPoint.RF), IR_DAEMON.getOldVolts(oldPoint.LR), IR_DAEMON.getOldVolts(oldPoint.RR));
+  IR_DAEMON.setReads((int)oldPoint.LF, (int)oldPoint.RF, (int)oldPoint.LR,(int) oldPoint.RR);
   IR_DAEMON.pickDirection();
   return IR_DAEMON.getCarpoint((int)oldPoint.turn, (int)oldPoint.velocity, false, false);
 }
 
 CarPoint processNewPoint(SmallPoint sp){
-  IR_DAEMON.update(IR_DAEMON.getVolts(sp.leftFront), IR_DAEMON.getVolts(sp.rightFront), IR_DAEMON.getVolts(sp.leftRear), IR_DAEMON.getVolts(sp.rightRear));
+  IR_DAEMON.updateReads(IR_DAEMON.getOldVolts((double)sp.leftFront), IR_DAEMON.getOldVolts((double)sp.rightFront), IR_DAEMON.getOldVolts((double)sp.leftRear), IR_DAEMON.getOldVolts((double)sp.rightRear));
+  IR_DAEMON.setReads(sp.leftFront, sp.rightFront, sp.leftRear, sp.rightRear);
   IR_DAEMON.pickDirection();
   return IR_DAEMON.getCarpoint((int)sp.setTurn, (int)sp.setSpeed, false, false);
 }
@@ -346,6 +349,14 @@ SmallPoint processLineToSmallPoint(String[] currentLine) {
         } catch (IOException e) {
         }
     }
+  void drawVerticalLine(float xpos, color c){
+     strokeWeight(10);
+     fill(c);
+     stroke(c);
+     line(xpos,displayHeight, xpos, 0);
+     strokeWeight(1);
+  }
+
 
 public void mouseWheel(MouseEvent event) {
   float e = event.getAmount();
@@ -366,11 +377,12 @@ public void mouseWheel(MouseEvent event) {
 }
 
 public void printData(Car newCar){
+  
     
     readouts[0] = "Car Position: " + newCar.distance;
     readouts[1] = "Target Position: " + newCar.targetX;
     readouts[2] = "Car theta: " + degrees(newCar.theta);
-    readouts[3] = "Target theta: " + degrees(newCar.theta);
+    readouts[3] = "Target theta: " + degrees((float)IR_DAEMON.avgTarget);
     readouts[4] = "Car Speed Set: " + newCar.mySpeedSet;  
     readouts[5] = "Car Turn Value: " + newCar.myTurn;
     readouts[6] = "Car Velocity: " + newCar.velocity;
@@ -522,6 +534,8 @@ class Wheel{
   int calcStripes(){
     return (int)Math.floor(wheelLength/(wheelWeight * 6));
   }
+  
+
   
   void initStripes(){
     stripes = new WheelStripe[calcStripes()];
@@ -855,16 +869,16 @@ class IRSensor{
   }
   
   int calcColor(int trust){
-          if (trust == 4){
+          if (trust == 3){
       return goodColor;
     }
-      else if (trust == 3){
+      else if (trust == 2){
         return mediumColor;
       }
-        else if (trust == 2){
+        else if (trust == 1){
          return badColor;
         }
-          else if(trust == 1){
+          else if(trust == 0){
               return reallyBadColor;
           }
             else {
