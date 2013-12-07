@@ -45,19 +45,19 @@ void setup() {
   reader = createReader("../live.csv");   
   //size(600,600);
   size(displayWidth, displayHeight);
-  conversionFactor = 2.0 + 3.0 *width / displayWidth;
   scrubber_inset = 50.0;
   scrubber_width = width-scrubber_inset*2;
   scrubber_y = height-scrubber_inset*2;
   smooth();
-  frameRate(5);
+  frameRate(30);
   hall_left = (width/4);
   hall_right = width - (width/4);
   lastSize = 0;
   csvWidth = 8;
 
-  maxVelocity = 8.0 * conversionFactor;
-  conversionFactor = 1.0 + 4.0 *width / displayWidth;
+  
+  conversionFactor = 1.0 + 2.0 *width / displayWidth;
+  maxVelocity = 35.0 * conversionFactor;
   readouts = new String[10];
     fontSize = (int) 4.0 *conversionFactor;
     if (fontSize <= 1){
@@ -98,6 +98,7 @@ void draw() {
     if (currentIndex == allPoints.size() -1){
       if (loop == true){
         currentIndex = 0;
+        theFloor.resetPosition();
       }
     }
     else
@@ -106,10 +107,8 @@ void draw() {
   }
     
   if (currentPoint != null && playback == true){
-  CarPoint newPoint = processNewPoint(currentPoint);
-  
-  theCar.updateCar(newPoint);
-  theFloor.updateFloor(newPoint, theCar);
+  theCar.updateCar(currentPoint);
+  theFloor.updateFloor(currentPoint, theCar);
   }
   
   fill(255);
@@ -207,15 +206,20 @@ void mouseDragged(){
     else if (timeScrubber.xpos > width - scrubber_inset){
       timeScrubber.xpos = width - scrubber_inset;
     }
+    int lastIndex = currentIndex;
     currentIndex = (int)((float)allPoints.size()*((float)(timeScrubber.xpos - scrubber_inset)/scrubber_width));
     if (currentIndex > allPoints.size()-1){
       currentIndex = allPoints.size()-1;
     }
   }
-  currentPoint = allPoints.get(currentIndex);
-  theCar.updateCar(currentPoint);
-  theFloor.updateFloor(currentPoint, theCar);
-}
+  if (lastIndex > currentIndex){
+    
+  forceUpdateCarFloorBackwards();
+  }
+  else {
+    forceUpdateCarFloor();
+  }
+} 
   
 
 void mouseReleased() {
@@ -356,6 +360,23 @@ SmallPoint processLineToSmallPoint(String[] currentLine) {
      line(xpos,displayHeight, xpos, 0);
      strokeWeight(1);
   }
+  
+  public void forceUpdateCarFloor(boolean reverse){
+      boolean stopReset = theCar.stop;
+  currentPoint = allPoints.get(currentIndex);
+  theCar.stop = false;
+  theFloor.stop = false;
+  if (!reverse){   
+  theCar.updateCar(currentPoint);
+  theFloor.updateFloor(currentPoint, theCar);
+  }
+  else{
+    theCar.updateCarBackwards(currentPoint);
+    theFloor.updateFloorBackwards(currentPoint, theCar);
+  }
+  theCar.stop = stopReset;
+  theFloor.stop = stopReset;
+  }
 
 
 public void mouseWheel(MouseEvent event) {
@@ -370,9 +391,7 @@ public void mouseWheel(MouseEvent event) {
         currentIndex--;
   }
 }
-  currentPoint = allPoints.get(currentIndex);
-  theCar.updateCar(currentPoint);
-  theFloor.updateFloor(currentPoint, theCar);
+  forceUpdateCarFloor();
   timeScrubber.xpos = scrubber_inset + ((float)currentIndex / allPoints.size())*scrubber_width; 
 }
 
@@ -511,7 +530,7 @@ class Wheel{
   float centerTurn = 1500;
   float turnAmount = 1500; // 1000 == full right
   float turnTheta;
-  float wheelSize = 5.0f; //IR units
+  float wheelSize = 10.0f; //IR units
   float wheelLength = (wheelSize * conversionFactor) * 6/5;
   float wheelWidth = (wheelSize * conversionFactor) * 4/5;
   float maxTheta = radians(30.0f);
@@ -615,7 +634,7 @@ class Car{
   public float xpos;
   public float ypos;
   public float myTurn;
-  public float mySize = 20.0; // in IR units, measured top sensor area
+  public float mySize = 31.0; // in IR units, measured top sensor area
   float topLength = mySize*conversionFactor;
   float topWidth = mySize*conversionFactor / 2;
   float totalWidth = mySize*conversionFactor * 3/4;
@@ -743,6 +762,30 @@ public float calcVelocity(float speedSet){
       }
     }
     
+        void updatePositionBackwards(){
+            if (xpos > width+totalWidth){
+       xpos = 0+(xpos-(width+totalWidth));
+    }
+      if (ypos > height+totalLength){
+        ypos = 0+(ypos-height-totalLength);}
+      if (xpos < 0){
+        xpos = width + xpos + totalWidth;
+      }
+      if (ypos < 0){
+        ypos = height + ypos+totalLength;
+      }
+    
+      //xpos += sin(theta) * velocity;
+      //ypos -= cos(theta) * velocity;
+           if (distance < 0){
+       //xpos = hall_left - distance * conversionFactor;
+        xpos = width/2 - (-width/4 - distance*conversionFactor);
+      }
+      else {
+        xpos = width/2 + (-width/4 - distance*conversionFactor);
+      }
+    }
+    
     void setXY(float x, float y){
       xpos = x;
       ypos = y;
@@ -789,6 +832,12 @@ public float calcVelocity(float speedSet){
         translate(currentSensor.getX(), currentSensor.getY());
         rotate(currentSensor.getTheta());
         currentSensor.shootBeam(reads[i], trusts[i]);
+        if (i == 1){
+          currentSensor.drawWall(reads[i], reads[i+2], trusts[i], mySize*conversionFactor);
+        }
+        else if (i == 0){
+          currentSensor.drawWall(reads[i], reads[i+2], trusts[i], -mySize*conversionFactor);
+        }
         currentSensor.display();
         popMatrix();
         pushMatrix();
@@ -830,9 +879,9 @@ class IRSensor{
   float sensorLength = sensorSize * conversionFactor * 1.5;
   float theta = radians(0);
   int goodColor = color(0,255,0,150);
-  int mediumColor = color(255,243,3,125);
-  int badColor = color(255,184,3,100);
-  int reallyBadColor = color(232,0,0,50);
+  int mediumColor = color(255,243,3,150);
+  int badColor = color(255,184,3,150);
+  int reallyBadColor = color(232,0,0,150);
   int noColor = color(0,0,0,0);
   int sensorStroke = color(255);
   int sensorColor = color(0);
@@ -899,6 +948,20 @@ class IRSensor{
     ellipseMode(CENTER);
     ellipse(value*conversionFactor, 0, beamSplashSize, beamSplashSize);
   }
+  
+    void drawWall(float valueF, float valueR, int trust, float carSize){
+    int beamColor = calcColor(trust);
+    stroke(beamColor);
+    fill(beamColor);
+    if (beamColor == noColor){
+        noStroke();
+        noFill();
+    }
+    strokeWeight(3);
+    
+    line(valueF*conversionFactor, 0, valueR*conversionFactor, carSize);
+    strokeWeight(1);
+  }
     
   
   void display(){
@@ -916,17 +979,13 @@ class IRSensor{
 
 class Floor{
   public boolean stop = false;
-  float yLimitUp = -(height*3);
-  float yLimitDown = -height;
-  float yReset = -(height *2);
-  float floorWidth = width;
-  float floorHeight = height * 5;
-  float gridSize = 20.0;
-  float xdist = 20.0 * conversionFactor;
-  float ydist = 20.0 * conversionFactor;
+  float floorWidth = width * 5;
+  float floorHeight = height * 100;
+  float xdist = 31.0 * conversionFactor;
+  float ydist = 31.0 * conversionFactor;
   float velocity = 0;
-  float xpos = width;
-  float ypos =  yReset;
+  float xpos = -floorWidth/2;
+  float ypos = -floorHeight/2;
   int floorStroke = color(150);
   int floorWeight = 1;
   float horizontalRules; 
@@ -953,33 +1012,40 @@ class Floor{
       velocity = vel;
   }
   
+  void resetPosition(){
+    xpos = -floorWidth/2;
+    ypos = -floorHeight/2;
+  }
+  
   float getY(){
       return ypos;
   }
       void updatePosition(){
-            if (xpos >= floorWidth/4){
-       xpos = 0+(xpos%floorWidth/4);
-    }
-            else if (xpos <= -floorWidth/4){
-                xpos = 0 - (xpos%floorWidth/4);
-            }
-            
-           if (ypos <= yLimitUp){
-       ypos = yReset + (ypos - yLimitUp);
-    }
-            else if (ypos >= yLimitDown){
-                ypos = yReset + (ypos - yLimitDown);
-            }
       
-      //xpos += sin(theta) * velocity;
       ypos += cos(theta) * velocity ;
+      xpos -= sin(theta) * velocity ;
     }
+    
+          void updatePositionBackwards(){
+      
+      ypos += cos(theta) * velocity ;
+      xpos -= sin(theta) * velocity ;
+    }
+  
   
   public void updateFloor(CarPoint newPoint, Car newCar){
     setTheta(newPoint.theta);
     setVelocity(newCar.velocity);
     if (!stop){
     updatePosition();
+    }
+  }
+  
+    public void updateFloorBackwards(CarPoint newPoint, Car newCar){
+    setTheta(newPoint.theta);
+    setVelocity(newCar.velocity);
+    if (!stop){
+    updatePositionBackwards();
     }
   }
   
