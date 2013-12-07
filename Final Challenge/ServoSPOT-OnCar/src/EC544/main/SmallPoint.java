@@ -48,8 +48,8 @@ public class SmallPoint {
         leftRear = LR;
         rightRear = RR;
         setTurn = turn;
-        System.out.println("Turn in SmallPoint constructor: " + turn);
-        System.out.println("setTurn in SmallPoint constructor: " + setTurn);
+        //System.out.println("Turn in SmallPoint constructor: " + turn);
+        //System.out.println("setTurn in SmallPoint constructor: " + setTurn);
         setSpeed = speed;
     }
 
@@ -117,13 +117,13 @@ public class SmallPoint {
         else {
             out = unsigned;
         }
-        System.out.println("Converted unsigned ("+unsigned+"to signed ("+out+").");
+        //System.out.println("Converted unsigned ("+unsigned+"to signed ("+out+").");
         return out;
     }
 
     public static int servoValueToUnsignedInt(int setTurn) {
         int out =  toUnsignedInt(setTurn / 10);
-        System.out.println("Wrote servo value ("+setTurn+")to datagram as " + out);
+        //System.out.println("Wrote servo value ("+setTurn+")to datagram as " + out);
         return out;
     }
 
@@ -171,7 +171,7 @@ public class SmallPoint {
         } else {
             out =  v;
         }
-        System.out.println("Converted signed ("+v+") to unsigned ("+out+".");
+        //System.out.println("Converted signed ("+v+") to unsigned ("+out+".");
         return out;
         
     }

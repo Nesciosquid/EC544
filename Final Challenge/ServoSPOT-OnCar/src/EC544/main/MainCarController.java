@@ -74,19 +74,13 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     private static final int SERVO_MAX_VALUE = 2000;
     private static final int SERVO_MIN_VALUE = 1000;
     private static final int SAMPLE_TIME = 50;
-    private static final int TURN_HIGH_STEP = 500; //steering step high
     private static final int TURN_LOW_STEP = 20; //steering step low
     private static final int SPEED_HIGH_STEP = 50; //speeding step high
     private static final int SPEED_LOW_STEP = 30; //speeding step low
-    private static double CAR_LENGTH = 10.0; // in 'IR' units, whatever those are
-    private static double CONFIDENCE_DISTANCE = 20.0; // in 'IR' units
     private static final int HOST_PORT = 42;
     private static double MAX_TRACKING_ANGLE = 30.0;
     private static double CONFIDENCE_HIGH_CUTOFF = 1.00;
     private static double CONFIDENCE_CUTOFF_STEP = .25;
-    private static boolean stopTurn = false;
-    private static boolean startTurn = false;
-    private static int MIN_TURN_DIFF = 10;
     private static boolean REVERSE_LEDS = false;
     private static BufferedWriter writeOut;
     // Devices
@@ -104,31 +98,21 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     private Servo turnServo = new Servo(eDemo.getOutputPins()[EDemoBoard.H1]);
     // 2nd servo for forward & backward direction
     private Servo speedServo = new Servo(eDemo.getOutputPins()[EDemoBoard.H0]);
-    private BlinkenLights progBlinker = new BlinkenLights(0, 3);
-    private BlinkenLights velocityBlinker = new BlinkenLights(4, 7);
-    private int current1 = SERVO_CENTER_VALUE;
-    private int current2 = SERVO_CENTER_VALUE;
-    private int step1 = TURN_LOW_STEP;
-    private int step2 = SPEED_LOW_STEP;
-    private int direction = 0;
-    private double sensor_distance = 31.75; // cm
     //private int servo1ForwardValue;
     //private int servo2ForwardValue;
     private static int setSpeed = 1500;
     private static int setTurn = 1500;
     private static int slowSpeed = 1400;
-    private int servo1Left = SERVO_CENTER_VALUE + TURN_LOW_STEP;
-    private int servo1Right = SERVO_CENTER_VALUE - TURN_LOW_STEP;
-    private int servo2Forward = SERVO_CENTER_VALUE + SPEED_LOW_STEP;
-    private int servo2Back = SERVO_CENTER_VALUE - SPEED_LOW_STEP;
-    private int default_turn_cycles = 5;
-    private long myAddr = 0;
-    private int STOP = 0;
-    private int BROADCAST_PORT_COUNT = 1;
-    private int BROADCAST_POINT_SKIP = 3; // Number of datapoints to skip (send 1 out of N+1)
+    private final int SAMPLE_COUNT = 4; //used to average reads or skip broadcasting
+    private double[] LF_samples = new double[SAMPLE_COUNT];
+    private double[] RF_samples = new double[SAMPLE_COUNT];
+    private double[] LR_samples = new double[SAMPLE_COUNT];
+    private double[] RR_samples = new double[SAMPLE_COUNT];
+    private int stopCar = 0;
+    private final int BROADCAST_PORT_COUNT = 1;
     RadiogramConnection[] broadcastConnections = new RadiogramConnection[BROADCAST_PORT_COUNT];
     Datagram[] broadcastDatagrams = new Datagram[BROADCAST_PORT_COUNT];
-    IRDaemon IR_DAEMON = new IRDaemon(CAR_LENGTH, CONFIDENCE_DISTANCE);
+    IRDaemon IR_DAEMON = new IRDaemon();
     LEDaemon LED_DAEMON = new LEDaemon(myLEDs, REVERSE_LEDS, CONFIDENCE_HIGH_CUTOFF, CONFIDENCE_CUTOFF_STEP, MAX_TRACKING_ANGLE);
 
     //Initialize RadiogramConnections.
@@ -170,7 +154,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
             }
 
         } else if (sw.getSwitch() == sw2) {
-            STOP = 1;
+            stopCar = 1;
             speedServo.setValue(1500);
 
         }
@@ -204,8 +188,8 @@ public class MainCarController extends MIDlet implements ISwitchListener {
             System.out.println("IOexception " + ex + "in writeToDatagram.");
         }
     }
-    
-        private void writeToDatagram(SmallPoint sp, Datagram dg) {
+
+    private void writeToDatagram(SmallPoint sp, Datagram dg) {
         try {
             dg.reset();
             dg.writeByte(sp.booleansToUnsignedInt());
@@ -216,7 +200,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
             dg.writeByte(sp.servoValueToUnsignedInt(sp.setTurn));
             dg.writeByte(sp.servoValueToUnsignedInt(sp.setSpeed));
             dg.writeDouble(sp.time);
- 
+
         } catch (IOException ex) {
             System.out.println("IOexception " + ex + "in writeToDatagram.");
         }
@@ -227,7 +211,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         try {
             dg = rc.newDatagram(rc.getMaximumLength());
             writeToDatagram(cp, dg);
-            
+
             //System.out.println("Sending carpoint! Time: " + System.currentTimeMillis());
             rc.send(dg);
         } catch (IOException ex) {
@@ -249,40 +233,55 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         }
     }
 
+    private double calcAverage(double[] values) {
+        double sum = 0.0;
+        for (int i = 0; i < values.length; i++) {
+            sum += values[i];
+        }
+        return sum / values.length;
+    }
+
+    private void sampleSensors() {
+        try {
+            for (int i = 0; i < SAMPLE_COUNT; i++) {
+                LF_samples[i] = irLeftFront.getVoltage();
+                RF_samples[i] = irRightFront.getVoltage();
+                LR_samples[i] = irLeftRear.getVoltage();
+                RR_samples[i] = irRightRear.getVoltage();
+                try {
+                    Thread.sleep(SAMPLE_TIME);
+                } catch (InterruptedException ex) {
+                    System.out.println("Interrupted exception in sampleSensors()" + ex);
+                }
+            }
+            double LF_avg = calcAverage(LF_samples);
+            double RF_avg = calcAverage(RF_samples);
+            double LR_avg = calcAverage(LR_samples);
+            double RR_avg = calcAverage(RR_samples);
+            IR_DAEMON.updateReads(LF_avg, RF_avg, LR_avg, RR_avg);
+            LED_DAEMON.changeColors(IR_DAEMON.thetaRight, IR_DAEMON.thetaLeft, IR_DAEMON.confidenceRF, IR_DAEMON.confidenceLF, IR_DAEMON.confidenceRR, IR_DAEMON.confidenceLR);
+        } catch (IOException ex) {
+            System.out.println("IOException in sampleSensors()! " + ex);
+        }
+    }
+
+    //Deprecated
     private void updateIR() {
         try {
-            IR_DAEMON.update(irLeftFront.getVoltage(), irRightFront.getVoltage(), irLeftRear.getVoltage(), irRightRear.getVoltage()); //Does a LOT of calculatoins, see IR_DAEMON class!
+            IR_DAEMON.updateReads(irLeftFront.getVoltage(), irRightFront.getVoltage(), irLeftRear.getVoltage(), irRightRear.getVoltage()); //Does a LOT of calculatoins, see IR_DAEMON class!
             LED_DAEMON.changeColors(IR_DAEMON.thetaRight, IR_DAEMON.thetaLeft, IR_DAEMON.confidenceRF, IR_DAEMON.confidenceLF, IR_DAEMON.confidenceRR, IR_DAEMON.confidenceLR);
         } catch (IOException ex) {
             System.out.println("IOException " + ex + " in updateIR()");
         }
     }
 
-    /**
-     * This code runs when the app begins, usually on SunSPOT restart. *
-     */
-    protected void startApp() throws MIDletStateChangeException {
-        BootloaderListenerService.getInstance().start();
-        initializeConn();
-        System.out.println("Hello, world");
-        sw1.addISwitchListener(this);
-        sw2.addISwitchListener(this);
-
-        turnHard();
-
-        for (int i = 0; i < myLEDs.size(); i++) {
-            myLEDs.setOn();
-            myLEDs.getLED(i).setColor(LEDColor.GREEN);
-        }
-
-        Utils.sleep(500);
-        LED_DAEMON.setAllOff();
+    private void oldSampleLoop() {
         int broadcastCounter = 0; //Used with BROADCAST_PORT_COUNT
         int skipCounter = 0; // Used to skip sending datapoints to reduce network traffic
+        int skipCount = SAMPLE_COUNT - 1;
+        while (stopCar != 1) { // Runs this loop until the program ends, currently mapped to sw2
 
-        while (STOP != 1) { // Runs this loop until the program ends, currently mapped to sw2
-
-            updateIR();
+            sampleSensors();
             String command = IR_DAEMON.pickDirection(); // You MUST call pickDirection(); or IR_DAEMON will give you the wrong response for turnSuggest!
             setTurn = IR_DAEMON.turnSuggest;
 
@@ -295,7 +294,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
             turnHard();
 
             //Used for transmitting to different ports, and skipping transmission of datapoints
-            if (skipCounter == BROADCAST_POINT_SKIP) {
+            if (skipCounter == skipCount) {
                 //CarPoint cp = IR_DAEMON.getCarpoint(setTurn, setSpeed, startTurn, stopTurn);
                 SmallPoint sp = IR_DAEMON.getSmallPoint(setTurn, setSpeed, System.currentTimeMillis());
                 //transmitCarPoint(cp, broadcastConnections[broadcastCounter], broadcastDatagrams[broadcastCounter]);
@@ -311,10 +310,62 @@ public class MainCarController extends MIDlet implements ISwitchListener {
             }
 
             Utils.sleep(SAMPLE_TIME);
-            if (STOP == 1) {
+            if (stopCar == 1) {
                 speedServo.setValue(1500);
             }
         }
+    }
+
+    private void sampleLoop() {
+        while (stopCar != 1) { // Runs this loop until the program ends, currently mapped to sw2
+
+            sampleSensors(); // takes IR readings and updates IR_DAEMON
+            String command = IR_DAEMON.pickDirection(); // You MUST call pickDirection() or IR_DAEMON will give you the wrong response for turnSuggest!
+            setTurn = IR_DAEMON.turnSuggest;
+
+            //If the IR_DAEMON can't tell you where to go, you should slow down...
+            if (command.equals("unknown")) {
+                driveSlow();
+            } else {
+                drive();
+            }
+            turnHard();
+
+            SmallPoint sp = IR_DAEMON.getSmallPoint(setTurn, setSpeed, System.currentTimeMillis());
+            transmitSmallPoint(sp, broadcastConnections[0], broadcastDatagrams[0]);
+
+            if (stopCar == 1) {
+                speedServo.setValue(1500);
+            }
+        }
+    }
+
+    /**
+     * This code runs when the app begins, usually on SunSPOT restart. *
+     */
+    protected void startApp() throws MIDletStateChangeException {
+        BootloaderListenerService.getInstance().start();
+        initializeConn();
+        System.out.println("Hello, world");
+        sw1.addISwitchListener(this);
+        sw2.addISwitchListener(this);
+
+        turnHard(); // sets steering to center for startup
+
+        for (int i = 0; i < myLEDs.size(); i++) {
+            myLEDs.setOn();
+            myLEDs.getLED(i).setColor(LEDColor.GREEN);
+        }
+
+        Utils.sleep(500);
+        LED_DAEMON.setAllOff();
+
+        new Thread() {
+            public void run() {
+                sampleLoop();
+            }
+        }.start();
+
     }
 
     //Update turn servo to approach current setTurn value
