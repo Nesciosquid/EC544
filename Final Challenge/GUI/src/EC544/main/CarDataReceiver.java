@@ -47,11 +47,13 @@ public class CarDataReceiver {
 
     // Configuration variables for destination port, sampling interval
     private static final int HOST_PORT = 42;
+    private static final int SEND_PORT = 41;
     private static final int SEND_INTERVAL = 60 * 1000;
     private static final String OUTPUT_FILE = "live.csv";
     private static final String INPUT_LOG = "log_input.csv";
     private static final String OUTPUT_LOG = "log_processed.csv";
     private static final String KEY_FILE = "keys.txt";
+    private static final String COMMAND_FILE = "commands.csv";
     private java.util.Date startDate = new java.util.Date();
     private Timestamp startTime = new Timestamp(startDate.getTime());
     private JTextArea status = new JTextArea();
@@ -62,6 +64,8 @@ public class CarDataReceiver {
     private String logFile_output = ("./logs/" + startTime.toString().replaceAll("[^a-zA-Z0-9]+", "") + " log.csv");
     private CSVWriter logger = new CSVWriter(logFile_output);
     private CSVWriter out = new CSVWriter(OUTPUT_FILE);
+    private CSVWriter commandInit = new CSVWriter(COMMAND_FILE);
+    private BufferedReader commander;
     private HashMap columnIDs = new HashMap();
     private HashMap log_columnIDs = new HashMap();
     private ArrayList<String> log_header_names = new ArrayList<String>();
@@ -74,12 +78,14 @@ public class CarDataReceiver {
     private int channelIndex;
     private int RECEIVE_PORT_COUNT = 1;
     Datagram[] allDatagrams = new Datagram[RECEIVE_PORT_COUNT];
+    RadiogramConnection commandConn;
     RadiogramConnection[] allConnections = new RadiogramConnection[RECEIVE_PORT_COUNT];
+    Datagram commandData;
 
     class Listener implements IPacketQualityListener {
 
         public void notifyPacket(long src, long dest, int rssi, int corr, int lqi, int length) {
-            System.out.println("Packet received!: " + System.currentTimeMillis());
+            //System.out.println("Packet received!: " + System.currentTimeMillis());
         }
     }
     //-----------Set up 
@@ -97,8 +103,8 @@ public class CarDataReceiver {
         while (true) {
 
             while (outPoints.size() > 0) {
-                System.out.println("in write loop, " + outPoints.size());
-                System.out.println("Adding cpoint to CSV");
+                //System.out.println("in write loop, " + outPoints.size());
+                //System.out.println("Adding cpoint to CSV");
                 out.addCSVLine(outPoints.get(0).toString());
                 logger.addCSVLine(outPoints.get(0).toString());
                 outPoints.remove(0);
@@ -109,6 +115,38 @@ public class CarDataReceiver {
             } catch (InterruptedException e) {
                 System.out.println("Exception" + e + " in writeLoop");
 
+            }
+        }
+    }
+
+    private void readLoop() {
+        try{
+        commandConn = (RadiogramConnection) Connector.open("radiogram://broadcast:" + (SEND_PORT));
+        }
+        catch (IOException ex){
+            System.out.println("IOException in setting up commandConn!");
+        }
+        while (true) {
+            try {
+                while (commander.ready()) {
+                    String currentLine = "";
+                    System.out.println("reading new command..");
+                    commandData = commandConn.newDatagram(commandConn.getMaximumLength());
+                    commandData.reset();
+                    currentLine = commander.readLine();
+                    String[] commands = currentLine.split(",");
+                    if (!commands[0].equals("command")) {
+                        commandData.writeUTF("command");
+                        System.out.println("Sending command: " + commands[0] + "," + commands[1]);
+                        for (int i = 0; i < commands.length; i++) {
+                            System.out.println("Writing "+i+": " + commands[i]);
+                            commandData.writeUTF(commands[i]);
+                        }
+                        commandConn.send(commandData);
+                    }
+                }
+            } catch (IOException ex) {
+                System.out.println("IOexception" + ex + " in readLoop()");
             }
         }
     }
@@ -125,11 +163,12 @@ public class CarDataReceiver {
             double time = dg.readDouble();
             sp = new SmallPoint(LF, RF, LR, RR, setTurn * 10, setSpeed * 10);
             sp.time = time;
-            System.out.println("Booleans in toSmallPoint: " + booleans);
-            System.out.println("setTurn in toSmallPoint: " + setTurn + ", setTurn * 10: " + setTurn*10);
+            /*System.out.println("Booleans in toSmallPoint: " + booleans);
+            System.out.println("setTurn in toSmallPoint: " + setTurn + ", setTurn * 10: " + setTurn * 10);
             System.out.println("If it was signed, setTurn would be: " + SmallPoint.toUnsignedInt(setTurn));
             System.out.println("If it was unsigned, setTurn would be: " + SmallPoint.convertUnsignedInt(setTurn));
-            System.out.println("setSpeed in toSmallPoint: " + setSpeed + ", setSpeed * 10: " + setSpeed*10);
+            System.out.println("setSpeed in toSmallPoint: " + setSpeed + ", setSpeed * 10: " + setSpeed * 10);
+            */
             sp.setBooleans(booleans);
         } catch (IOException ex) {
             System.out.println("IOexception " + ex + " in toSmallPoint!");
@@ -172,10 +211,13 @@ public class CarDataReceiver {
 
     //This is for receiving data and draw
     private void run() throws Exception {
+        commander = new BufferedReader(new FileReader(COMMAND_FILE));
         RadioPacketDispatcher.getInstance().registerPacketQualityListener(listen);
         String headerLine = SmallPoint.headerRow();
+        String commandHeader = "command,value";
         logger.initCSV(headerLine);
         out.initCSV(headerLine);
+        commandInit.initCSV(commandHeader);
         new Thread() {
             public void run() {
                 writeLoop();
@@ -195,6 +237,12 @@ public class CarDataReceiver {
             System.err.println("setUp caught " + e.getMessage());
             throw e;
         }
+        
+                new Thread() {
+            public void run() {
+                readLoop();
+            }
+        }.start();
 
         status.append("Listening on port " + HOST_PORT + "...\n");
         //----------------------------------------------//
@@ -229,7 +277,7 @@ public class CarDataReceiver {
                 dg = rc.newDatagram(rc.getMaximumLength());
                 double startPoint = System.currentTimeMillis();
                 rc.receive(dg);
-                System.out.println("Got datagram in loop: " + number);
+                //System.out.println("Got datagram in loop: " + number);
                 double timepoint = System.currentTimeMillis();
                 String node = dg.getAddress(); // read address of the Spot that sent the datagram
                 //String firstLine = "";
@@ -237,7 +285,7 @@ public class CarDataReceiver {
                 if (dg.getLength() != 0) {
                     //firstLine = dg.readUTF();
                     firstByte = dg.readUnsignedByte();
-                    System.out.println("Firstbyte: " + firstByte);
+                    //System.out.println("Firstbyte: " + firstByte);
                 } else {
                     System.out.println("Datagram length = 0!");
                 }
@@ -253,15 +301,15 @@ public class CarDataReceiver {
                 if (SmallPoint.checkBooleans(firstByte)) {
                     SmallPoint sp = toSmallPoint(dg, firstByte);
                     outPoints.add(sp);
-                    sp.printPoint();
+                    //sp.printPoint();
                 } else {
                     System.out.println("Received packet of unknown type!");
                 }
 
 
                 //System.out.println("Got carpoint, " + outPoints.size() + "in queue:  "+ System.currentTimeMillis());
-                System.out.println("Receiving took: " + (System.currentTimeMillis() - tp) + " milliseconds, Processing took: " + (System.currentTimeMillis() - timepoint) + "milliseconds.");
-                System.out.println("Datagram received at" + timepoint + ", Datagram size: " + dg.getLength());
+                //System.out.println("Receiving took: " + (System.currentTimeMillis() - tp) + " milliseconds, Processing took: " + (System.currentTimeMillis() - timepoint) + "milliseconds.");
+                //System.out.println("Datagram received at" + timepoint + ", Datagram size: " + dg.getLength());
                 tp = System.currentTimeMillis();
 
             } catch (Exception e) {

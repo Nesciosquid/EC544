@@ -2,6 +2,7 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
+
 import java.lang.Math.*;
 
 /**
@@ -10,34 +11,35 @@ import java.lang.Math.*;
  */
 public class IRDaemon {
 
- /*---------------------*/
+    /*---------------------*/
     // Control booleans
     /*---------------------*/
-    private final boolean DYNAMIC_HALLWAY_SIZE = false;
+    final boolean DYNAMIC_HALLWAY_SIZE = false;
+    final boolean ALCOVES_SUCK = true;
+    final boolean ALCOVES_SUCK_ALTERNATE = false;
     /*---------------------*/
     // Environmental coefficients
     /*---------------------*/
     final double NEAR_WALL_DISTANCE = 43.0; //15.0 in IR
     final double DEFAULT_HALL_SIZE = 181.0; // 42.0 in IR
     final double IDEAL_DISTANCE = 75.0; // 20.0 in IR
-    final double CLOSE_DISTANCE = 65.0; // 20.0 in IR, 17.0 works great
+    final double CLOSE_DISTANCE = 75.0; // 20.0 in IR, 17.0 works great
     /*---------------------*/
     // Car-specific coefficients 
     /*---------------------*/
-    final int TURN_RIGHT_MAX = 1250; // 1000
-    final int TURN_LEFT_MAX = 1750; // 2000
-    final int TURN_MAX = 400;
+    final int TURN_RIGHT_MAX = 1000; // 1000
+    final int TURN_LEFT_MAX = 2000; // 2000
+    final int TURN_MAX = 500;
     final double SENSOR_DISTANCE = 31.0;// cm, 10.0 in IR in IR units
-    final double MAX_TURN_DISTANCE = 100.0;
-    final double MAX_TURN_ANGLE = 15.0;
-    final double APPROACH_ANGLE = 15.0;
-    final double EMERGENCY_APPROACH_ANGLE = 40.0;
+    final double MAX_TURN_DISTANCE = 75.0;
+    final double MAX_TURN_ANGLE = 25.0;
+    final double APPROACH_ANGLE = 25.0;
     final double MAX_TURN_FACTOR = 1.0;
     final double MAX_DISTANCE_FACTOR = 1.0;
     final double MAX_ANGLE_FACTOR = 1.0;
     final double MAX_HALL_CONFIDENCE = 1.25; // if new hall distance is > 1.25 of average, beware!
     final double MAX_CONFIDENCE_ANGLE = 35;
-    final double MAX_THETA_CHANGE = degToRadians(2);
+    final double MAX_THETA_CHANGE = degToRadians(10);
     /*---------------------*/
     // Confidence calculation coefficients
     /*---------------------*/
@@ -71,6 +73,7 @@ public class IRDaemon {
     private double sdHall = 0.0;
     private double middleDistance = DEFAULT_HALL_SIZE / 2;
     private boolean isLeftPreferred = true;
+    private boolean isCoasting = false;
     private double targetDistance = IDEAL_DISTANCE; // 20.0 in IR
     private double targetTheta = 0.0;
     public double avgTarget;
@@ -94,7 +97,6 @@ public class IRDaemon {
     /*---------------------*/
     public int turnSuggest;
     public int speedSuggest;
-    
 
     /*---------------------*/
     // Constructors         
@@ -102,12 +104,10 @@ public class IRDaemon {
     public IRDaemon() { // for calculations only
         initRecents();
     }
-    
+
     /*---------------------*/
     // Pathing decisions
     /*---------------------*/
-    
-    
     public String pickDirection() {
 
         int L = leftTrust();
@@ -116,23 +116,33 @@ public class IRDaemon {
         if (L == 0 && R == 0) {
             return "unknown";
         } else if (L > R) {
-            isLeftPreferred = true;
-            if (R == 0) {
-                targetDistance = CLOSE_DISTANCE;
+            if (L == 1 && ALCOVES_SUCK) { //alcove on the right, close to right wall
+                leftDrift(CLOSE_DISTANCE);
+                return "drift left";
             } else {
-                targetDistance = IDEAL_DISTANCE;
+                isLeftPreferred = true;
+                if (R == 0) {
+                    targetDistance = CLOSE_DISTANCE;
+                } else {
+                    targetDistance = IDEAL_DISTANCE;
+                }
+                leftTurn(targetDistance);
+                return "trust left";
             }
-            leftTurn(targetDistance);
-            return "trust left";
         } else if (R > L) {
             isLeftPreferred = false;
-            if (L == 0) {
-                targetDistance = CLOSE_DISTANCE;
+            if (R == 1 && ALCOVES_SUCK) {//alcove on the left, close to left wall
+                 rightDrift(CLOSE_DISTANCE);
+                 return "drift right";
             } else {
-                targetDistance = IDEAL_DISTANCE;
+                if (L == 0) {
+                    targetDistance = CLOSE_DISTANCE;
+                } else {
+                    targetDistance = IDEAL_DISTANCE;
+                }
+                rightTurn(targetDistance);
+                return "trust right";
             }
-            rightTurn(targetDistance);
-            return "trust right";
         } else if (L == 0 && R == 0) {
             return "unknown";
         } else {
@@ -204,17 +214,16 @@ public class IRDaemon {
         double oldAvg = average(tempThetas);
         double maxTheta = oldAvg + MAX_THETA_CHANGE;
         double minTheta = oldAvg - MAX_THETA_CHANGE;
-        
-        if (new_theta >= maxTheta){
+
+        if (new_theta >= maxTheta) {
             new_theta = maxTheta;
             System.out.println("New theta too big!");
-        }
-        else if (new_theta <= minTheta){
+        } else if (new_theta <= minTheta) {
             new_theta = minTheta;
-                        System.out.println("New theta too small!");
+            System.out.println("New theta too small!");
 
         }
-        
+
         for (int i = 0; i < recentThetas.length; i++) {
             if (i == 0) {
                 recentThetas[i] = new_theta;
@@ -515,25 +524,23 @@ public class IRDaemon {
     }
 
     private int calcTrust(double confFront, double confBack) {
-     double greater;
-      if (confFront >= confBack){
-        greater = confFront;
-      }
-      else {
-        greater = confBack;
-      }
-      
-      if (greater < CONF_3)
-      {
-        return 3;
-      }
-      else if (greater < CONF_2){
-        return 2;
-      }
-      if (greater < CONF_1){
-        return 1;
-      }
-      else return 0;
+        double greater;
+        if (confFront >= confBack) {
+            greater = confFront;
+        } else {
+            greater = confBack;
+        }
+
+        if (greater < CONF_3) {
+            return 3;
+        } else if (greater < CONF_2) {
+            return 2;
+        }
+        if (greater < CONF_1) {
+            return 1;
+        } else {
+            return 0;
+        }
 
     }
 
@@ -563,6 +570,23 @@ public class IRDaemon {
         storeTarget(calcIdealTheta(set_distance, avgDist));
         turnSuggest = calcTurn(avgTarget, avgTheta);
     }
+    
+    //Turn toward right wall (since distance will be high), but do not update theta average
+    public void rightDrift(double set_distance){
+        //Do not store theta -- don't trust the right value!
+        storeDistance(distanceAvgR);
+        storeTarget(calcIdealTheta(set_distance, avgDist));
+        turnSuggest = calcTurn(avgTarget, avgTheta);
+    }
+    
+        //Turn toward right wall (since distance will be high), but do not update theta average
+    public void leftDrift(double set_distance){
+        set_distance = -set_distance;
+        //Do not store theta -- don't trust the right value!
+        storeDistance(distanceAvgL);
+        storeTarget(calcIdealTheta(set_distance, avgDist));
+        turnSuggest = calcTurn(avgTarget, avgTheta);
+    }
 
     public void rightTurn(double set_distance) {
         //System.out.println("Turning right, set distance: " + set_distance);
@@ -573,10 +597,8 @@ public class IRDaemon {
     }
 
     private double calcConfidence(double reading) {
-        double newConf = reading / CONFIDENCE_DISTANCE;
-              System.out.println("Confidence: "+ newConf + ", reading: " + reading + ", CONF_DISTANCE:" + CONFIDENCE_DISTANCE);
-    return newConf;
-  }
+        return reading / CONFIDENCE_DISTANCE;
+    }
 
     private double calcDistance(double reading, double theta) {
         return Math.cos(theta) * reading;
@@ -659,16 +681,16 @@ public class IRDaemon {
             return false;
         }
     }
-    
-        public void setReads(int newLF, int newRF, int newLR, int newRR){
+
+    public void setReads(int newLF, int newRF, int newLR, int newRR) {
         readingLF = newLF;
         readingRF = newRF;
         readingRR = newRR;
         readingLR = newLR;
-        
-                updateAngles();
+        updateAngles();
         updateDistance();
         updateConfidence();
+
     }
 
     private boolean isTooDifferent(double currentValue, double[] recentValues) {
