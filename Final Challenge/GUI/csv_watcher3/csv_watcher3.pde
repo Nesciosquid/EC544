@@ -30,6 +30,7 @@ boolean timeScrubbing;
 boolean reset;
 float worldX;
 float worldY;
+float worldTheta;
 boolean loop;
 int turnSetting;
 Button fast;
@@ -46,7 +47,7 @@ void setup() {
   scrubbing = false;
   loop = true;
   // Open the file from the createWriter() example
-  reader = createReader("alcoves.csv");    
+  reader = createReader("cornering_square.csv");    
   //reader = createReader("../live.csv");   
   writer = createWriter("../commands.csv");
   //size(600,600);
@@ -60,10 +61,11 @@ void setup() {
   hall_right = width - (width/4);
   lastSize = 0;
   csvWidth = 8;
+  worldTheta = (float) IRDaemon.degToRadians(0);
 
   
-  conversionFactor = .25 + .10 *width / displayWidth;
-  maxVelocity = 40.0 * conversionFactor;
+  conversionFactor = 1.0 + .1 *width / displayWidth;
+  maxVelocity = 40.0;
   readouts = new String[10];
     fontSize = (int) 4.0 *conversionFactor;
     if (fontSize <= 1){
@@ -122,10 +124,8 @@ void draw() {
   if (currentPoint != null && playback == true){
   theCar.updateCar(currentPoint);
   theCar.updateWorldPosition();
-  WallSegment a= new WallSegment(theCar.theta, worldX, worldY, theCar.reads[0], theCar.reads[2], theCar.trusts[0], true);
-  System.out.println("A trust should be: " + theCar.trusts[0]);
-          System.out.println("Old trust a: " + a.oldTrust);
-  WallSegment b = new WallSegment(theCar.theta, worldX, worldY, theCar.reads[1], theCar.reads[3], theCar.trusts[1], false);
+  WallSegment a= new WallSegment(worldTheta, worldX, worldY, theCar.reads[0], theCar.reads[2], theCar.trusts[0], true);
+  WallSegment b = new WallSegment(worldTheta, worldX, worldY, theCar.reads[1], theCar.reads[3], theCar.trusts[1], false);
   allSegments.add(a);
   allSegments.add(b);
   theCar.drawPreviousReads();
@@ -595,7 +595,8 @@ class Wheel {
             stripeLength = newLength;
         }
 
-        public void move(float velocity, float maxY, float minY) {
+        public void move(float newVelocity, float maxY, float minY) {
+           float velocity = newVelocity * conversionFactor;
             float max = maxY - stripeWeight;
             float min = minY + stripeWeight;
             ypos = ypos - velocity / 5;
@@ -856,8 +857,13 @@ class Car {
     }
     
     void updateWorldPosition() {
-      worldY -= cos(theta) * velocity;
-      worldX += sin(theta) * velocity;
+      float diff = myTurn - 1500;
+      float ratio = diff / 500;
+      float thetaTwo = ratio * (velocity/8) * (float)IRDaemon.degToRadians(1.5);
+      worldTheta += thetaTwo;
+      worldY -= cos(worldTheta) * velocity*conversionFactor;
+      worldX += sin(-worldTheta) * velocity*conversionFactor;
+      
     }
 
     void updatePosition() {
@@ -938,14 +944,15 @@ class Car {
     void drawPreviousReads(){
       pushMatrix();
       translate(xpos, ypos);
-      //rotate(-theta);
       float segLength;
       IRSensor currentSensor;
       for (int i = 0; i < allSegments.size(); i++){
         WallSegment segment = allSegments.get(i);
         pushMatrix();
         translate(segment.oldX-worldX, segment.oldY-worldY);
-        //rotate(segment.oldTheta-theta);
+        rotate((segment.oldTheta-theta));
+        
+        
         if (segment.isLeft){
           currentSensor = sensors[0];
           segLength = -mySize*conversionFactor;
@@ -996,7 +1003,7 @@ class Car {
 
         pushMatrix();
         translate(xpos, ypos);
-        rotate(theta);
+        rotate(theta-worldTheta);
         rectMode(CENTER);
         fill(totalColor);
         stroke(totalStroke);
@@ -1162,8 +1169,8 @@ class Floor {
 
     void updatePosition() {
 
-        ypos += cos(theta) * velocity;
-        xpos -= sin(theta) * velocity;
+        ypos = -floorWidth/2 + worldY;
+        xpos = -floorWidth /2 - worldX;
     }
 
     void updatePositionBackwards() {
