@@ -21,8 +21,11 @@
  **/
 package EC544.main;
 
+import com.sun.spot.io.j2me.radiogram.Radiogram;
 import com.sun.spot.io.j2me.radiogram.RadiogramConnection;
 import com.sun.spot.peripheral.Spot;
+
+import com.sun.spot.peripheral.TimeoutException;
 import com.sun.spot.peripheral.radio.IRadioPolicyManager;
 import com.sun.spot.peripheral.radio.RadioFactory;
 import com.sun.spot.resources.Resources;
@@ -78,6 +81,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     private static final int SPEED_HIGH_STEP = 50; //speeding step high
     private static final int SPEED_LOW_STEP = 30; //speeding step low
     private static final int HOST_PORT = 42;
+    private static final int RECEIVE_PORT = 41;
     private static double MAX_TRACKING_ANGLE = 30.0;
     private static double CONFIDENCE_HIGH_CUTOFF = 1.00;
     private static double CONFIDENCE_CUTOFF_STEP = .25;
@@ -100,10 +104,17 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     private Servo speedServo = new Servo(eDemo.getOutputPins()[EDemoBoard.H0]);
     //private int servo1ForwardValue;
     //private int servo2ForwardValue;
+    private boolean recvDo = true;
+    private boolean lockTurn;
+    private boolean takeNextRight = false;
+    private boolean takeNextLeft = false;
+    private boolean honking = false;
     private static int setSpeed = 1500;
+    private static double setDistance = 75.0; // cm
     private static int setTurn = 1500;
     private static int slowSpeed = 1400;
-    private final int SAMPLE_COUNT = 4; //used to average reads or skip broadcasting
+    private final int SAMPLE_COUNT = 1; //used to average reads or skip broadcasting
+    private final int BROADCAST_SKIP = 4;
     private double[] LF_samples = new double[SAMPLE_COUNT];
     private double[] RF_samples = new double[SAMPLE_COUNT];
     private double[] LR_samples = new double[SAMPLE_COUNT];
@@ -137,6 +148,77 @@ public class MainCarController extends MIDlet implements ISwitchListener {
 
     //Constructor, currently not used
     public MainCarController() {
+    }
+
+    private void processCommand(String command, int value) {
+        if (command.equals("speed")) {
+            setSpeed = value;
+        } else if (command.equals("turn")) {
+            if (value == 0) {
+                lockTurn = false;
+            } else {
+                setTurn = value;
+                System.out.println("Set turn value to: " + setTurn);
+                turnHard();
+                lockTurn = true;
+            }
+        } else if (command.equals("takeNextRight")) {
+            takeNextRight = true;
+        } else if (command.equals("takeNextLeft")) {
+            takeNextLeft = true;
+        } else if (command.equals("honk")) {
+            honking = true;
+        } else if (command.equals("stop")) {
+            setSpeed = 1500;
+        } else if (command.equals("setDistance")) {
+            setDistance = value;
+        }
+
+    }
+
+    private void receiveLoop() {
+        RadiogramConnection rcvConn = null;
+        while (recvDo) {
+            try {
+                rcvConn = (RadiogramConnection) Connector.open("radiogram://:" + RECEIVE_PORT);
+                while (recvDo) {
+                    try {
+                        Radiogram rdg = (Radiogram) rcvConn.newDatagram(rcvConn.getMaximumLength());
+                        rdg.reset();
+                        rcvConn.receive(rdg);           // listen for a packet
+                        // Append this message to the incoming message queue "availableMessages"
+                        try {
+                            String firstLine = rdg.readUTF();
+                            System.out.println("Received datagram type: " + firstLine);
+                            if (firstLine.equals("triggered")) {
+                                // do interesting things with beacon code!
+                            } else if (firstLine.equals("command")) {
+                                String newCommand = rdg.readUTF();
+                                System.out.println("Command type: " + newCommand);
+                                int newValue = Integer.parseInt(rdg.readUTF());
+                                System.out.println("Command value: " + newValue);
+                                processCommand(newCommand, newValue);
+                            }
+                        } catch (IOException ex) {
+                            System.out.println("IOException in recvLoop, reading first line of packet!");
+                            System.out.println(ex);
+                        }
+                    } catch (TimeoutException tex) {        // timeout - display no packet received
+                        System.out.println(tex);
+                    }
+                }
+            } catch (IOException ex) {
+                System.out.println("IO exception in while block of receiving loop");
+            } finally {
+                if (rcvConn != null) {
+                    try {
+                        rcvConn.close();
+                    } catch (IOException ex) {
+                        System.out.println("IO exception in finally block of receiving loop.");
+                    }
+                }
+            }
+        }
     }
 
     public void switchReleased(SwitchEvent sw) {
@@ -224,7 +306,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         try {
             dg = rc.newDatagram(rc.getMaximumLength());
             writeToDatagram(sp, dg);
-            sp.printPoint();
+            //sp.printPoint();
             //System.out.println("Sending carpoint! Time: " + System.currentTimeMillis());
             rc.send(dg);
         } catch (IOException ex) {
@@ -283,7 +365,9 @@ public class MainCarController extends MIDlet implements ISwitchListener {
 
             sampleSensors();
             String command = IR_DAEMON.pickDirection(); // You MUST call pickDirection(); or IR_DAEMON will give you the wrong response for turnSuggest!
-            setTurn = IR_DAEMON.turnSuggest;
+            if (!lockTurn) {
+                setTurn = IR_DAEMON.turnSuggest;
+            }
 
             //If the IR_DAEMON can't tell you where to go, you should slow down...
             if (command.equals("unknown")) {
@@ -318,25 +402,31 @@ public class MainCarController extends MIDlet implements ISwitchListener {
 
     private void sampleLoop() {
         while (stopCar != 1) { // Runs this loop until the program ends, currently mapped to sw2
+            for (int i = 0; i < BROADCAST_SKIP; i++) {
+                sampleSensors(); // takes IR readings and updates IR_DAEMON
+                String command = IR_DAEMON.pickDirection(); // You MUST call pickDirection() or IR_DAEMON will give you the wrong response for turnSuggest!
+                if (!lockTurn) {
+                    setTurn = IR_DAEMON.turnSuggest;
+                }
 
-            sampleSensors(); // takes IR readings and updates IR_DAEMON
-            String command = IR_DAEMON.pickDirection(); // You MUST call pickDirection() or IR_DAEMON will give you the wrong response for turnSuggest!
-            setTurn = IR_DAEMON.turnSuggest;
+                //If the IR_DAEMON can't tell you where to go, you should slow down...
+                if (command.equals("unknown") && setSpeed != 1500) {
+                    driveSlow();
+                } else {
+                    drive();
+                }
 
-            //If the IR_DAEMON can't tell you where to go, you should slow down...
-            if (command.equals("unknown")) {
-                driveSlow();
-            } else {
-                drive();
+                if (stopCar == 1) {
+                    speedServo.setValue(1500);
+                }
+
+                turnHard();
             }
-            turnHard();
 
             SmallPoint sp = IR_DAEMON.getSmallPoint(setTurn, setSpeed, System.currentTimeMillis());
             transmitSmallPoint(sp, broadcastConnections[0], broadcastDatagrams[0]);
 
-            if (stopCar == 1) {
-                speedServo.setValue(1500);
-            }
+
         }
     }
 
@@ -363,6 +453,13 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         new Thread() {
             public void run() {
                 sampleLoop();
+            }
+        }.start();
+
+
+        new Thread() {
+            public void run() {
+                receiveLoop();
             }
         }.start();
 

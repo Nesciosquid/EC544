@@ -12,33 +12,35 @@ import com.sun.squawk.util.MathUtils;
  */
 public class IRDaemon {
 
- /*---------------------*/
+    /*---------------------*/
     // Control booleans
     /*---------------------*/
-    private final boolean DYNAMIC_HALLWAY_SIZE = false;
+    final boolean DYNAMIC_HALLWAY_SIZE = false;
+    final boolean ALCOVES_SUCK = true;
+    final boolean ALCOVES_SUCK_ALTERNATE = false;
     /*---------------------*/
     // Environmental coefficients
     /*---------------------*/
     final double NEAR_WALL_DISTANCE = 43.0; //15.0 in IR
     final double DEFAULT_HALL_SIZE = 181.0; // 42.0 in IR
     final double IDEAL_DISTANCE = 75.0; // 20.0 in IR
-    final double CLOSE_DISTANCE = 65.0; // 20.0 in IR, 17.0 works great
+    final double CLOSE_DISTANCE = 75.0; // 20.0 in IR, 17.0 works great
     /*---------------------*/
     // Car-specific coefficients 
     /*---------------------*/
-    final int TURN_RIGHT_MAX = 1250; // 1000
-    final int TURN_LEFT_MAX = 1750; // 2000
-    final int TURN_MAX = 400;
+    final int TURN_RIGHT_MAX = 1000; // 1000
+    final int TURN_LEFT_MAX = 2000; // 2000
+    final int TURN_MAX = 350; // 500
     final double SENSOR_DISTANCE = 31.0;// cm, 10.0 in IR in IR units
-    final double MAX_TURN_DISTANCE = 100.0;
-    final double MAX_TURN_ANGLE = 15.0;
-    final double APPROACH_ANGLE = 15.0;
+    final double MAX_TURN_DISTANCE = 90.0;
+    final double MAX_TURN_ANGLE = 25.0;
+    final double APPROACH_ANGLE = 25.0;
     final double MAX_TURN_FACTOR = 1.0;
     final double MAX_DISTANCE_FACTOR = 1.0;
     final double MAX_ANGLE_FACTOR = 1.0;
     final double MAX_HALL_CONFIDENCE = 1.25; // if new hall distance is > 1.25 of average, beware!
     final double MAX_CONFIDENCE_ANGLE = 35;
-    final double MAX_THETA_CHANGE = degToRadians(2);
+    final double MAX_THETA_CHANGE = degToRadians(5); //3
     /*---------------------*/
     // Confidence calculation coefficients
     /*---------------------*/
@@ -72,6 +74,7 @@ public class IRDaemon {
     private double sdHall = 0.0;
     private double middleDistance = DEFAULT_HALL_SIZE / 2;
     private boolean isLeftPreferred = true;
+    private boolean isCoasting = false;
     private double targetDistance = IDEAL_DISTANCE; // 20.0 in IR
     private double targetTheta = 0.0;
     public double avgTarget;
@@ -95,7 +98,7 @@ public class IRDaemon {
     /*---------------------*/
     public int turnSuggest;
     public int speedSuggest;
-    
+
     /*---------------------*/
     // Constructors         
     /*---------------------*/
@@ -114,23 +117,33 @@ public class IRDaemon {
         if (L == 0 && R == 0) {
             return "unknown";
         } else if (L > R) {
-            isLeftPreferred = true;
-            if (R == 0) {
-                targetDistance = CLOSE_DISTANCE;
+            if (L == 1 && ALCOVES_SUCK) { //alcove on the right, close to right wall
+                leftDrift(CLOSE_DISTANCE);
+                return "drift left";
             } else {
-                targetDistance = IDEAL_DISTANCE;
+                isLeftPreferred = true;
+                if (R == 0) {
+                    targetDistance = CLOSE_DISTANCE;
+                } else {
+                    targetDistance = IDEAL_DISTANCE;
+                }
+                leftTurn(targetDistance);
+                return "trust left";
             }
-            leftTurn(targetDistance);
-            return "trust left";
         } else if (R > L) {
             isLeftPreferred = false;
-            if (L == 0) {
-                targetDistance = CLOSE_DISTANCE;
+            if (R == 1 && ALCOVES_SUCK) {//alcove on the left, close to left wall
+                 rightDrift(CLOSE_DISTANCE);
+                 return "drift right";
             } else {
-                targetDistance = IDEAL_DISTANCE;
+                if (L == 0) {
+                    targetDistance = CLOSE_DISTANCE;
+                } else {
+                    targetDistance = IDEAL_DISTANCE;
+                }
+                rightTurn(targetDistance);
+                return "trust right";
             }
-            rightTurn(targetDistance);
-            return "trust right";
         } else if (L == 0 && R == 0) {
             return "unknown";
         } else {
@@ -555,6 +568,23 @@ public class IRDaemon {
         //System.out.println("recents: " + recentDists);
         //System.out.println("averages: " + avgDist);
         storeDistance(-distanceAvgL);
+        storeTarget(calcIdealTheta(set_distance, avgDist));
+        turnSuggest = calcTurn(avgTarget, avgTheta);
+    }
+    
+    //Turn toward right wall (since distance will be high), but do not update theta average
+    public void rightDrift(double set_distance){
+        //Do not store theta -- don't trust the right value!
+        storeDistance(distanceAvgR);
+        storeTarget(calcIdealTheta(set_distance, avgDist));
+        turnSuggest = calcTurn(avgTarget, avgTheta);
+    }
+    
+        //Turn toward right wall (since distance will be high), but do not update theta average
+    public void leftDrift(double set_distance){
+        set_distance = -set_distance;
+        //Do not store theta -- don't trust the right value!
+        storeDistance(distanceAvgL);
         storeTarget(calcIdealTheta(set_distance, avgDist));
         turnSuggest = calcTurn(avgTarget, avgTheta);
     }
