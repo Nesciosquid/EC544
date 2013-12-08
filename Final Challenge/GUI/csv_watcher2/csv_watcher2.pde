@@ -6,7 +6,9 @@ IRDaemon IR_DAEMON = new IRDaemon();
 /**************************/
 SmallPoint sp;
 BufferedReader reader;
+PrintWriter writer;
 Scrubber timeScrubber;
+Scrubber turnScrubber;
 String[] readouts;
 ArrayList<CarPoint> allPoints = new ArrayList<CarPoint>();
 int lastSize;
@@ -25,8 +27,11 @@ float scrubber_y;
 float scrubber_inset;
 boolean playback;
 boolean scrubbing;
+boolean turnScrubbing;
+boolean timeScrubbing;
 boolean reset;
 boolean loop;
+int turnSetting;
 Button fast;
 Button med;
 Button slow;
@@ -34,22 +39,23 @@ Car theCar;
 Floor theFloor;
  
 void setup() {
-  
+  turnSetting = 2000;
   currentIndex = 0;
   live = false;
   playback = true;
   scrubbing = false;
-  loop = false;
+  loop = true;
   // Open the file from the createWriter() example
-  //reader = createReader("12-6-freakouts.csv");    
-  reader = createReader("../live.csv");   
+  reader = createReader("cornering2.csv");    
+  //reader = createReader("../live.csv");   
+  writer = createWriter("../commands.csv");
   //size(600,600);
   size(displayWidth, displayHeight);
   scrubber_inset = 50.0;
   scrubber_width = width-scrubber_inset*2;
   scrubber_y = height-scrubber_inset*2;
   smooth();
-  frameRate(30);
+  frameRate(15);
   hall_left = (width/4);
   hall_right = width - (width/4);
   lastSize = 0;
@@ -64,7 +70,9 @@ void setup() {
       fontSize = 1.0;
     }
   
-  timeScrubber = new Scrubber();
+  timeScrubber = new Scrubber(scrubber_inset, scrubber_y, scrubber_width, 15*conversionFactor, true);
+  turnScrubber = new Scrubber(width/2-scrubber_inset, scrubber_inset, width/2-scrubber_inset, 15*conversionFactor, true);
+  //speedScrubber = new Scrubber();
   f = createFont("Arial",fontSize,true);
   fast = new Button(scrubber_inset + 40 * conversionFactor, height - scrubber_inset * 4, "fast"); 
   med = new Button(scrubber_inset + 25 * conversionFactor, height -  scrubber_inset * 4, "med");
@@ -94,7 +102,8 @@ void draw() {
   }
   else if (playback == true){
     currentPoint = allPoints.get(currentIndex);
-    timeScrubber.xpos = scrubber_inset + ((float)currentIndex / allPoints.size())*scrubber_width; 
+    timeScrubber.updatePosition((float)currentIndex / allPoints.size());
+    turnScrubber.updatePosition(map(turnSetting, 2000, 1000, 0, 1));
     if (currentIndex == allPoints.size() -1){
       if (loop == true){
         currentIndex = 0;
@@ -121,11 +130,16 @@ void draw() {
   //rect(hall_right, 0, width, height);
   printData(theCar);
   timeScrubber.display();
+  turnScrubber.display();
   fast.display();
   med.display();
   slow.display();
   }
 
+void keyPressed(){
+  writer.println("speed,1500");
+  writer.flush();
+}
 
 void printAllPoints() {
   if (allPoints.size() != lastSize){
@@ -152,8 +166,8 @@ CarPoint processNewPoint(SmallPoint sp){
 
 void mousePressed() {
   if (mouseButton == LEFT){
-  if (overScrubber()){
-    scrubbing = true;
+  if (timeScrubber.overScrubber()){
+    timeScrubbing = true;
     if (playback == true){
       reset = true;
       playback = false;
@@ -161,6 +175,9 @@ void mousePressed() {
       theFloor.stop = true;
     }
     
+  }
+  else if (turnScrubber.overScrubber()){
+    turnScrubbing = true;
   }
   else if (fast.isOver()){
     frameRate(100);
@@ -174,10 +191,6 @@ void mousePressed() {
     
   
   else{
-    if (loop == true){
-      loop = false;
-    }
-    else loop = true;
   }
 }
 else {
@@ -195,7 +208,8 @@ else {
 }
 
 void mouseDragged(){
-  if (scrubbing){
+  int lastIndex = currentIndex;
+  if (timeScrubbing){
     playback = false;
     theCar.stop = true;
     theFloor.stop = true;
@@ -206,18 +220,35 @@ void mouseDragged(){
     else if (timeScrubber.xpos > width - scrubber_inset){
       timeScrubber.xpos = width - scrubber_inset;
     }
-    int lastIndex = currentIndex;
+
     currentIndex = (int)((float)allPoints.size()*((float)(timeScrubber.xpos - scrubber_inset)/scrubber_width));
     if (currentIndex > allPoints.size()-1){
       currentIndex = allPoints.size()-1;
     }
   }
+  else if (turnScrubbing){
+    turnScrubber.xpos = mouseX;
+    if (turnScrubber.xpos < turnScrubber.xStart){
+      turnScrubber.xpos = turnScrubber.xStart;
+    }
+    else if (turnScrubber.xpos > turnScrubber.xpos+turnScrubber.xSize){
+      turnScrubber.xpos = turnScrubber.xpos+turnScrubber.xSize;
+    }
+    turnSetting = 2000 - 2*(int)(1000 * (float)(turnScrubber.xpos - turnScrubber.xStart)/(turnScrubber.xStart + turnScrubber.xSize));
+    if (turnSetting < 1000){
+      turnSetting = 1000;
+    }
+    else if (turnSetting > 2000){
+      turnSetting = 2000;
+    } 
+  }
+    
   if (lastIndex > currentIndex){
     
-  forceUpdateCarFloorBackwards();
+  forceUpdateCarFloor(true);
   }
-  else {
-    forceUpdateCarFloor();
+  else if (lastIndex < currentIndex){
+    forceUpdateCarFloor(false);
   }
 } 
   
@@ -230,19 +261,13 @@ void mouseReleased() {
   theFloor.stop = false;
   reset = false;
 }
-  scrubbing = false;
+  if (turnScrubbing){
+  writer.println("turn,"+turnSetting);
+    writer.flush();
+  timeScrubbing = false;
+  System.out.println("Sending turn:" + turnSetting);
   }
 }
-
-
-boolean overScrubber(){
-  if (mouseX >= timeScrubber.xpos - timeScrubber.size/3 && mouseX <= timeScrubber.xpos + timeScrubber.size/3){
-    if (mouseY >= timeScrubber.ypos - timeScrubber.size/2 && mouseY <= timeScrubber.ypos + timeScrubber.size/2){
-      return true;
-    }
-    else return false;
-  }
-  else return false;
 }
 
 SmallPoint processLineToSmallPoint(String[] currentLine) {
@@ -384,14 +409,16 @@ public void mouseWheel(MouseEvent event) {
   if (e < 0){
       if (currentIndex < allPoints.size()-1){
         currentIndex++;
+        forceUpdateCarFloor(false);
       }
 }
   else if (e > 0){
       if (currentIndex > 0){
         currentIndex--;
+        forceUpdateCarFloor(true);
   }
 }
-  forceUpdateCarFloor();
+  
   timeScrubber.xpos = scrubber_inset + ((float)currentIndex / allPoints.size())*scrubber_width; 
 }
 
@@ -423,30 +450,85 @@ public void printData(Car newCar){
          }
          
 public class Scrubber{
-public float xpos = scrubber_inset;
-public float ypos = scrubber_y;
-public float size = conversionFactor * 15.0;
+  
+public float xStart;
+public float yStart;
+public boolean isHorizontal;
+public float xpos;
+public float ypos;
+public float xSize;
+public float ySize;
+public float roundness = 10;
+public float dialXSize;
+public float dialYSize;
 
-public Scrubber(){
+public Scrubber(float newX, float newY, float newXSize, float newYSize, boolean horiz){
+  xStart = newX;
+  yStart = newY;
+  xSize = newXSize;
+  ySize = newYSize;
+  isHorizontal = horiz;
+  xpos = xStart;
+  ypos = yStart;
+  if (horiz){
+    dialXSize = ySize/3;
+    dialYSize = ySize;
+  }
+  else {
+    dialXSize = xSize;
+    dialYSize = xSize/3;
+  }
 }
 
+void updatePosition(float percentage){
+  if (isHorizontal){
+    xpos = xStart + percentage*xSize;
+  }
+  else{
+    ypos = xStart + percentage*ySize;
+  }
+}
+
+boolean overScrubberBar(){
+    if (mouseX >= xStart && mouseX <= xStart+xSize && mouseY >= yStart && mouseY <= yStart + ySize) {
+      return true;
+    }
+    else {
+      return false;
+    }
+  }
+ 
+boolean overScrubber(){
+  if (mouseX >= xpos - dialXSize/2 && mouseX <= xpos+dialXSize/2 && mouseY >= ypos - dialYSize/2 && mouseY <= ypos + dialYSize/2){
+    return true;
+  }
+  else {
+    return false;
+  }
+}
+  
+    
+
 public void display(){
+
   strokeWeight(3);
   stroke(0);
-  line(scrubber_inset, scrubber_y+scrubber_inset/2, scrubber_inset, scrubber_y-scrubber_inset/2);
-  line(width-scrubber_inset, scrubber_y+scrubber_inset/2, width-scrubber_inset, scrubber_y-scrubber_inset/2);
-  line(scrubber_inset, scrubber_y, width-scrubber_inset, scrubber_y);
-  strokeWeight(2);
-  stroke(255);
-  line(scrubber_inset, scrubber_y+scrubber_inset/2, scrubber_inset, scrubber_y-scrubber_inset/2);
-  line(width-scrubber_inset, scrubber_y+scrubber_inset/2, width-scrubber_inset, scrubber_y-scrubber_inset/2);
-  line(scrubber_inset, scrubber_y, width-scrubber_inset, scrubber_y);
+  if (isHorizontal){
+    line(xStart, yStart, xStart+xSize, yStart);
+    line(xStart, yStart-ySize/2, xStart, yStart+ySize/2);
+    line(xStart+xSize, yStart-ySize/2, xStart+xSize, yStart+ySize/2);
+  }
+  else{
+    line(xStart, yStart, xStart, yStart+ySize);
+    line(xStart+xSize/2, yStart, xStart-xSize/2, yStart);
+    line(xStart+xSize/2, yStart+ySize, xStart-xSize/2, yStart+ySize);
+  }
   
   strokeWeight(1);
   stroke(0);
   fill(255);
   rectMode(CENTER);
-  rect(xpos,ypos,size*2/3, size,10);
+  rect(xpos,ypos,dialXSize, dialYSize,roundness);
 }
 }
 
@@ -701,6 +783,32 @@ class Car{
        //updatePosition();
     }
     
+    public void updateCarBackwards(CarPoint newPoint){
+       reads[0] = newPoint.LF;
+       reads[1] = newPoint.RF;
+       reads[2] = newPoint.LR;
+       reads[3] = newPoint.RR;
+       trusts[0] = (int)newPoint.LT;
+       trusts[2] = (int)newPoint.LT;
+       trusts[1] = (int)newPoint.RT;
+       trusts[3] = (int)newPoint.RT;
+       leftWallDistance = newPoint.distRight;
+       rightWallDistance = newPoint.distLeft;
+       thetaRight = newPoint.thetaRight;
+       thetaLeft = newPoint.thetaLeft;
+       theta = newPoint.theta;
+       distance = newPoint.distance;
+       setTurn(newPoint.turn);
+       mySpeedSet = newPoint.velocity;
+       setVelocity(calcVelocity(mySpeedSet));
+       targetX = newPoint.targetDist;
+       startTurn = newPoint.startTurn;
+       stopTurn = newPoint.stopTurn;
+       
+       updateFrontWheels();
+       //updatePositionBackwards();
+    }
+    
 public float frontCenterX(){
     float tangent = topLength/2;
     float dx = sin(theta)*tangent;
@@ -878,8 +986,8 @@ class IRSensor{
   float sensorWidth = sensorSize * conversionFactor;
   float sensorLength = sensorSize * conversionFactor * 1.5;
   float theta = radians(0);
-  int goodColor = color(0,255,0,150);
-  int mediumColor = color(255,243,3,150);
+  int goodColor = color(0,0,255,150);
+  int mediumColor = color(0,255,0,150);
   int badColor = color(255,184,3,150);
   int reallyBadColor = color(232,0,0,150);
   int noColor = color(0,0,0,0);
