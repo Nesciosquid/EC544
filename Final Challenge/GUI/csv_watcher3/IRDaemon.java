@@ -319,9 +319,9 @@ public class IRDaemon {
   /*---------------------*/
   // Output
   /*---------------------*/
-  public CarPoint getCarpoint(int turn, int setSpeed, boolean startTurn, boolean stopTurn) {
+  public CarPoint getCarpoint(int turn, int setSpeed, boolean startTurn, boolean stopTurn, double time) {
     CarPoint cp = new CarPoint();
-    cp.time = System.currentTimeMillis();
+    cp.time = time;
     cp.LF = (float) readingLF;
     cp.RF = (float) readingRF;
     cp.LR = (float) readingLR;

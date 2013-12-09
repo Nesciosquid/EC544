@@ -135,6 +135,7 @@ public class CarDataReceiver {
                     commandData.reset();
                     currentLine = commander.readLine();
                     String[] commands = currentLine.split(",");
+                    if (commands.length > 0){
                     if (!commands[0].equals("command")) {
                         commandData.writeUTF("command");
                         System.out.println("Sending command: " + commands[0] + "," + commands[1]);
@@ -145,8 +146,9 @@ public class CarDataReceiver {
                         commandConn.send(commandData);
                     }
                 }
-            } catch (IOException ex) {
-                System.out.println("IOexception" + ex + " in readLoop()");
+                }
+            } catch (Exception ex) {
+                System.out.println("Exception" + ex + " in readLoop()");
             }
         }
     }

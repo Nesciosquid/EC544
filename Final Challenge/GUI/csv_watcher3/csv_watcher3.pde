@@ -19,6 +19,7 @@ float fontSize;
 float hall_right;
 CarPoint currentPoint;
 int currentIndex;
+double currentTime;
 boolean live;
 float scrubber_width;
 float scrubber_y;
@@ -32,22 +33,27 @@ float worldX;
 float worldY;
 float worldTheta;
 boolean loop;
+boolean rotateWorld = true;
 int turnSetting;
+int speedSetting;
+float turnFactor;
 Button fast;
 Button med;
 Button slow;
 Car theCar;
 Floor theFloor;
  
+
 void setup() {
-  turnSetting = 2000;
+  turnSetting = 1500;
+  speedSetting = 1500;
   currentIndex = 0;
   live = false;
   playback = true;
   scrubbing = false;
   loop = true;
   // Open the file from the createWriter() example
-  reader = createReader("cornering_square.csv");    
+  reader = createReader("sunday-corners.csv");    
   //reader = createReader("../live.csv");   
   writer = createWriter("../commands.csv");
   //size(600,600);
@@ -56,7 +62,7 @@ void setup() {
   scrubber_width = width-scrubber_inset*2;
   scrubber_y = height-scrubber_inset*2;
   smooth();
-  frameRate(15);
+  frameRate(120);
   hall_left = (width/4);
   hall_right = width - (width/4);
   lastSize = 0;
@@ -64,10 +70,13 @@ void setup() {
   worldTheta = (float) IRDaemon.degToRadians(0);
 
   
-  conversionFactor = 1.0 + .1 *width / displayWidth;
-  maxVelocity = 40.0;
+  conversionFactor = 0 + .5 *width / displayWidth;
+
+  maxVelocity = 37.5;
+    turnFactor = ((float)IR_DAEMON.degToRadians((double)3.6)/8);
+  
   readouts = new String[10];
-    fontSize = (int) 4.0 *conversionFactor;
+    fontSize = (int) 10.0 *conversionFactor;
     if (fontSize <= 1){
       fontSize = 1.0;
     }
@@ -91,6 +100,98 @@ void setup() {
   theFloor = new Floor();
 }
 
+void keyReleased(){
+  if (key == 't'){
+    //rotateWorld = false;
+  }
+}
+
+void keyPressed(){
+    if (key == 't'){
+    rotateWorld = true;
+    }
+    
+  
+  if (key == 'c'){
+    writer.println("turn,1500");
+    writer.flush();
+  }
+  if (key == 's'){
+    writer.println("speed,1500");
+    writer.flush();
+  }
+  if (key == 'r'){
+    writer.println("takeNextRight,0");
+    writer.flush();
+  }
+  if (key == 'l'){
+    writer.println("takeNextLeft,0");
+    writer.flush();
+  }
+  if (key ==  CODED){
+    if (keyCode == LEFT){
+      if (turnSetting ==0){
+        turnSetting = 1500;
+      }
+      turnSetting +=250;
+      if (turnSetting >= 2000){
+        turnSetting = 2000;
+      }
+        writer.println("turn,"+turnSetting);
+        writer.flush();
+      
+    }
+    if (keyCode == RIGHT){
+            if (turnSetting ==0){
+        turnSetting = 1500;
+      }
+      turnSetting -= 250;
+      if (turnSetting <= 1000){
+        turnSetting = 1000;
+      }
+      writer.println("turn,"+turnSetting);
+      writer.flush();
+    }
+    if (keyCode == CONTROL){
+      turnSetting = 0;
+      writer.println("turn,"+turnSetting);
+      writer.flush();
+    }
+    if (keyCode == UP){
+      if (speedSetting == 0){
+        speedSetting = 1500;
+      }
+      else{
+      speedSetting -= 50;
+      if (speedSetting <= 1000){
+        speedSetting = 1000;
+      }
+      writer.println("speed,"+speedSetting);
+      writer.flush();
+    }
+    }
+    if (keyCode == DOWN){
+            if (speedSetting == 0){
+        speedSetting = 1500;
+      }{
+      speedSetting += 50;{
+        if (speedSetting >= 2000){
+         speedSetting = 2000;
+        }
+      }
+      writer.println("speed,"+speedSetting);
+      writer.flush();
+    } 
+    }
+  else if (keyCode == SHIFT){
+    speedSetting = 0;
+    writer.println("speed,"+speedSetting);
+    writer.flush();
+}
+}
+}
+  
+
 public float storeData(String newData){
   if (newData == "" || newData == null)
     return 0.0f;
@@ -112,8 +213,8 @@ void draw() {
       if (loop == true){
         currentIndex = 0;
         theFloor.resetPosition();
-        worldX = theCar.xpos;
-        worldY = theCar.ypos;
+        //worldX = theCar.xpos;
+        //worldY = theCar.ypos;
       }
     }
     else
@@ -124,8 +225,8 @@ void draw() {
   if (currentPoint != null && playback == true){
   theCar.updateCar(currentPoint);
   theCar.updateWorldPosition();
-  WallSegment a= new WallSegment(worldTheta, worldX, worldY, theCar.reads[0], theCar.reads[2], theCar.trusts[0], true);
-  WallSegment b = new WallSegment(worldTheta, worldX, worldY, theCar.reads[1], theCar.reads[3], theCar.trusts[1], false);
+  WallSegment a= new WallSegment(worldTheta-theCar.theta, worldX, worldY, theCar.reads[0], theCar.reads[2], theCar.trusts[0], true);
+  WallSegment b = new WallSegment(worldTheta-theCar.theta, worldX, worldY, theCar.reads[1], theCar.reads[3], theCar.trusts[1], false);
   allSegments.add(a);
   allSegments.add(b);
   theCar.drawPreviousReads();
@@ -148,11 +249,6 @@ void draw() {
   slow.display();
   }
 
-void keyPressed(){
-  writer.println("speed,1500");
-  writer.flush();
-}
-
 void printAllPoints() {
   if (allPoints.size() != lastSize){
   for (int i = 0; i < allPoints.size(); i ++){
@@ -166,14 +262,14 @@ CarPoint processNewPoint(CarPoint oldPoint){
   IR_DAEMON.updateReads(IR_DAEMON.getOldVolts(oldPoint.LF), IR_DAEMON.getOldVolts(oldPoint.RF), IR_DAEMON.getOldVolts(oldPoint.LR), IR_DAEMON.getOldVolts(oldPoint.RR));
   IR_DAEMON.setReads((int)oldPoint.LF, (int)oldPoint.RF, (int)oldPoint.LR,(int) oldPoint.RR);
   IR_DAEMON.pickDirection();
-  return IR_DAEMON.getCarpoint((int)oldPoint.turn, (int)oldPoint.velocity, false, false);
+  return IR_DAEMON.getCarpoint((int)oldPoint.turn, (int)oldPoint.velocity, false, false, oldPoint.time);
 }
 
 CarPoint processNewPoint(SmallPoint sp){
   IR_DAEMON.updateReads(IR_DAEMON.getOldVolts((double)sp.leftFront), IR_DAEMON.getOldVolts((double)sp.rightFront), IR_DAEMON.getOldVolts((double)sp.leftRear), IR_DAEMON.getOldVolts((double)sp.rightRear));
   IR_DAEMON.setReads(sp.leftFront, sp.rightFront, sp.leftRear, sp.rightRear);
   IR_DAEMON.pickDirection();
-  return IR_DAEMON.getCarpoint((int)sp.setTurn, (int)sp.setSpeed, false, false);
+  return IR_DAEMON.getCarpoint((int)sp.setTurn, (int)sp.setSpeed, false, false, sp.time);
 }
 
 void mousePressed() {
@@ -445,8 +541,8 @@ public void printData(Car newCar){
     readouts[4] = "Car Speed Set: " + newCar.mySpeedSet;  
     readouts[5] = "Car Turn Value: " + newCar.myTurn;
     readouts[6] = "Car Velocity: " + newCar.velocity;
-    readouts[7] = "Scroll up/down to move frame-by-frame.";
-    readouts[8] = "Left click and drag to scrub through timepoints.";
+    readouts[7] = "Timepoint: " +currentPoint.time;
+    readouts[8] = "World theta: " + worldTheta;
     readouts[9] = "Right click to start/stop playback.";
     
       
@@ -857,10 +953,16 @@ class Car {
     }
     
     void updateWorldPosition() {
+      if (rotateWorld){
       float diff = myTurn - 1500;
       float ratio = diff / 500;
-      float thetaTwo = ratio * (velocity/8) * (float)IRDaemon.degToRadians(1.5);
-      worldTheta += thetaTwo;
+      float thetaTwo = ratio * (velocity * turnFactor);
+      if (velocity >=0){
+      worldTheta += thetaTwo;}
+      else{
+        worldTheta += thetaTwo;
+      }
+      }
       worldY -= cos(worldTheta) * velocity*conversionFactor;
       worldX += sin(-worldTheta) * velocity*conversionFactor;
       
@@ -950,7 +1052,7 @@ class Car {
         WallSegment segment = allSegments.get(i);
         pushMatrix();
         translate(segment.oldX-worldX, segment.oldY-worldY);
-        rotate((segment.oldTheta-theta));
+        rotate(-(segment.oldTheta));
         
         
         if (segment.isLeft){
@@ -1033,7 +1135,7 @@ class IRSensor {
     int goodColor = color(0, 0, 255, 150);
     int mediumColor = color(0, 255, 0, 100);
     int badColor = color(255, 184, 3, 50);
-    int reallyBadColor = color(232, 0, 0, 25);
+    int reallyBadColor = color(232, 0, 0, 10);
     int noColor = color(0, 0, 0, 0);
     int sensorStroke = color(255);
     int sensorColor = color(0);
@@ -1169,7 +1271,7 @@ class Floor {
 
     void updatePosition() {
 
-        ypos = -floorWidth/2 + worldY;
+        ypos = -floorWidth/2 - worldY;
         xpos = -floorWidth /2 - worldX;
     }
 

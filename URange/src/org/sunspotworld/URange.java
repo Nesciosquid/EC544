@@ -36,13 +36,14 @@ import javax.microedition.midlet.MIDletStateChangeException;
 public class URange extends MIDlet {
 
     public static final String BROADCAST_PORT = "37";
+    public double[] voltages = new double[10]; 
 
     public void startApp() throws MIDletStateChangeException {
         System.out.println("Starting sensor gathering");
         BootloaderListenerService.getInstance().start();   // monitor the USB (if connected) and recognize commands from host
         long ourAddr = RadioFactory.getRadioPolicyManager().getIEEEAddress();
         System.out.println("Our radio address = " + IEEEAddress.toDottedHex(ourAddr));
-        IAnalogInput sensor = EDemoBoard.getInstance().getAnalogInputs()[EDemoBoard.A3];
+        IAnalogInput sensor = EDemoBoard.getInstance().getAnalogInputs()[EDemoBoard.A4];
         
         DatagramConnection dgConnection = null;
         Datagram dg = null;
@@ -57,24 +58,35 @@ public class URange extends MIDlet {
             ex.printStackTrace();
             return;
         }
+        int counter = 0;
         while(true){
             try {
                 
                 // 9.8mV per inch
                 double val = sensor.getVoltage();
-                System.out.println("Value in volts: "+ val);  
-                double inches = val/0.0098;
-                System.out.println("Value in inches: "+ inches);
+                voltages[counter] = val;
+                double sum = 0;
+                for (int i = 0; i < voltages.length; i++){
+                    sum += voltages[i];
+                }
+                System.out.println("Voltage average: " + sum/voltages.length);
+                counter ++;
+                if (counter > 9){
+                    counter = 0;
+                }
+                //System.out.println("Value in volts: "+ val);  
+                //double inches = val/0.0098;
+                //System.out.println("Value in inches: "+ inches);
                 // Write the string into the dataGram.
-                dg.reset();
-                dg.writeLong(ourAddr);
-                dg.writeDouble(val);
+                //dg.reset();
+                //dg.writeLong(ourAddr);
+                //dg.writeDouble(val);
 
                 //Send DataGram
-                dgConnection.send(dg);
+                //dgConnection.send(dg);
 
                 // Sleep for 200 milliseconds.
-                Utils.sleep(200); 
+                Utils.sleep(50); 
             } catch (IOException ex){
                 System.err.println("Caught " + ex + " while collecting/sending sensor sample.");
                 ex.printStackTrace();

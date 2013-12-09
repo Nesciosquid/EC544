@@ -94,6 +94,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     private IAnalogInput irLeftFront = eDemo.getAnalogInputs()[EDemoBoard.A0];
     private IAnalogInput irRightRear = eDemo.getAnalogInputs()[EDemoBoard.A3];
     private IAnalogInput irLeftRear = eDemo.getAnalogInputs()[EDemoBoard.A2];
+    IAnalogInput front = EDemoBoard.getInstance().getAnalogInputs()[EDemoBoard.A4];
     private ISwitch sw1 = eDemo.getSwitches()[EDemoBoard.SW1];
     private ISwitch sw2 = eDemo.getSwitches()[EDemoBoard.SW2];
     private ITriColorLED[] leds = eDemo.getLEDs();
@@ -106,6 +107,8 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     //private int servo2ForwardValue;
     private boolean recvDo = true;
     private boolean lockTurn;
+    private boolean lockSpeed = true;
+    private boolean isColliding = false;
     private boolean takeNextRight = false;
     private boolean takeNextLeft = false;
     private boolean honking = false;
@@ -115,6 +118,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     private static int slowSpeed = 1400;
     private final int SAMPLE_COUNT = 1; //used to average reads or skip broadcasting
     private final int BROADCAST_SKIP = 4;
+    private double[] ultra_samples = new double[SAMPLE_COUNT];
     private double[] LF_samples = new double[SAMPLE_COUNT];
     private double[] RF_samples = new double[SAMPLE_COUNT];
     private double[] LR_samples = new double[SAMPLE_COUNT];
@@ -146,13 +150,27 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         }
     }
 
+    public void alertSound() {
+        // siren code goes here
+    }
+
     //Constructor, currently not used
     public MainCarController() {
+    }
+
+    private double ultrasonicToCent(double volts) {
+        return 363.2 * volts - 7;
     }
 
     private void processCommand(String command, int value) {
         if (command.equals("speed")) {
             setSpeed = value;
+            lockSpeed = true;
+            if (value == 0) {
+                lockSpeed = false;
+                setSpeed = 1500;
+            }
+            System.out.println("Speed set to" + setSpeed);
         } else if (command.equals("turn")) {
             if (value == 0) {
                 lockTurn = false;
@@ -162,6 +180,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
                 turnHard();
                 lockTurn = true;
             }
+            System.out.println("Turn set to" + setTurn);
         } else if (command.equals("takeNextRight")) {
             takeNextRight = true;
         } else if (command.equals("takeNextLeft")) {
@@ -330,18 +349,28 @@ public class MainCarController extends MIDlet implements ISwitchListener {
                 RF_samples[i] = irRightFront.getVoltage();
                 LR_samples[i] = irLeftRear.getVoltage();
                 RR_samples[i] = irRightRear.getVoltage();
+                ultra_samples[i] = IR_DAEMON.getDistance(front.getVoltage());
                 try {
                     Thread.sleep(SAMPLE_TIME);
                 } catch (InterruptedException ex) {
                     System.out.println("Interrupted exception in sampleSensors()" + ex);
                 }
             }
+            double ultra_avg = calcAverage(ultra_samples);
             double LF_avg = calcAverage(LF_samples);
             double RF_avg = calcAverage(RF_samples);
             double LR_avg = calcAverage(LR_samples);
             double RR_avg = calcAverage(RR_samples);
             IR_DAEMON.updateReads(LF_avg, RF_avg, LR_avg, RR_avg);
             LED_DAEMON.changeColors(IR_DAEMON.thetaRight, IR_DAEMON.thetaLeft, IR_DAEMON.confidenceRF, IR_DAEMON.confidenceLF, IR_DAEMON.confidenceRR, IR_DAEMON.confidenceLR);
+            if (ultra_avg <= 80) {
+                if (!isColliding) {
+                    
+                    isColliding = true;
+                    alertSound();
+            }
+            }
+
         } catch (IOException ex) {
             System.out.println("IOException in sampleSensors()! " + ex);
         }
@@ -355,6 +384,19 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         } catch (IOException ex) {
             System.out.println("IOException " + ex + " in updateIR()");
         }
+    }
+
+    private void takeSuggestions() {
+        if (!lockTurn) {
+
+            setTurn = IR_DAEMON.turnSuggest;
+        }
+        if (!lockSpeed) {
+            setSpeed = IR_DAEMON.speedSuggest;
+        }
+        isColliding = IR_DAEMON.isColliding;
+        takeNextLeft = IR_DAEMON.takeNextLeft;
+        takeNextRight = IR_DAEMON.takeNextRight;
     }
 
     private void oldSampleLoop() {
@@ -403,10 +445,15 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     private void sampleLoop() {
         while (stopCar != 1) { // Runs this loop until the program ends, currently mapped to sw2
             for (int i = 0; i < BROADCAST_SKIP; i++) {
-                sampleSensors(); // takes IR readings and updates IR_DAEMON
+                sampleSensors(); // takes IR readings and updates IR_DAEMON\
+                IR_DAEMON.updateState(isColliding, takeNextLeft, takeNextRight, setSpeed);
                 String command = IR_DAEMON.pickDirection(); // You MUST call pickDirection() or IR_DAEMON will give you the wrong response for turnSuggest!
-                if (!lockTurn) {
-                    setTurn = IR_DAEMON.turnSuggest;
+                takeSuggestions();
+                if (takeNextLeft){
+                    System.out.println("Taking next left!");
+                }
+                if (takeNextRight){
+                    System.out.println("Taking next right!");
                 }
 
                 //If the IR_DAEMON can't tell you where to go, you should slow down...
@@ -482,7 +529,9 @@ public class MainCarController extends MIDlet implements ISwitchListener {
 
     //Update the car's speed to approach the slowSpeed setting
     private void driveSlow() {
-        updateServo(speedServo, slowSpeed, SPEED_HIGH_STEP);
+        if (!lockSpeed) {
+            updateServo(speedServo, slowSpeed, SPEED_HIGH_STEP);
+        }
     }
 
     //Set servo to the target value.

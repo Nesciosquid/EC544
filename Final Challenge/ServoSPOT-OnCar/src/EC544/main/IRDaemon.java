@@ -18,6 +18,14 @@ public class IRDaemon {
     final boolean DYNAMIC_HALLWAY_SIZE = false;
     final boolean ALCOVES_SUCK = true;
     final boolean ALCOVES_SUCK_ALTERNATE = false;
+    public boolean isColliding = false;
+    public boolean takeNextLeft = false;
+    public boolean takeNextRight = false;
+    public int setSpeed;
+    boolean corneringLeft = false;
+    boolean corneringRight = false;
+    final double CORNER_TIMEOUT = 3000;
+    double corner_finish_time = 0;
     /*---------------------*/
     // Environmental coefficients
     /*---------------------*/
@@ -30,8 +38,9 @@ public class IRDaemon {
     /*---------------------*/
     final int TURN_RIGHT_MAX = 1000; // 1000
     final int TURN_LEFT_MAX = 2000; // 2000
-    final int TURN_MAX = 350; // 500
+    final int TURN_MAX = 500; // 500
     final double SENSOR_DISTANCE = 31.0;// cm, 10.0 in IR in IR units
+    final double CORNER_DISTANCE = -40.0;
     final double MAX_TURN_DISTANCE = 90.0;
     final double MAX_TURN_ANGLE = 25.0;
     final double APPROACH_ANGLE = 25.0;
@@ -111,10 +120,77 @@ public class IRDaemon {
     /*---------------------*/
     public String pickDirection() {
 
+        if (isColliding) {
+            isColliding = false;
+            speedSuggest = 1750;
+            System.out.println("Colliding, going backwards!");
+        } else {
+            speedSuggest = 1300;
+        }
+
         int L = leftTrust();
         int R = rightTrust();
 
-        if (L == 0 && R == 0) {
+        if (corneringLeft) {
+            System.out.println("Cornering left!");
+            if (L >= 2 && System.currentTimeMillis() >= corner_finish_time) {
+                targetDistance = IDEAL_DISTANCE;
+                takeNextLeft = false;
+                corner_finish_time = 0;
+                corneringLeft = false;
+                leftDrift(targetDistance);
+                System.out.println("Finished left corner!");
+                return "left corner finish";
+            } else {
+                targetDistance = CORNER_DISTANCE;
+                leftTurn(targetDistance);
+                return "cornering left";
+            }
+
+
+        } else if (corneringRight) {
+            System.out.println("Cornering right!");
+            if (R >= 2 && System.currentTimeMillis() >= corner_finish_time) {
+                targetDistance = IDEAL_DISTANCE;
+                takeNextRight = false;
+                corner_finish_time = 0;
+                corneringRight = false;
+                System.out.println("Finished left corner!");
+
+                rightDrift(targetDistance);
+                return "right corner finish";
+            } else {
+                targetDistance = CORNER_DISTANCE;
+                rightTurn(targetDistance);
+                return "cornering right";
+            }
+
+        }
+
+        if (takeNextLeft) {
+            System.out.println("IR: Taking next left...");
+            if (L == 0) {
+                targetDistance = CORNER_DISTANCE;
+                corner_finish_time = System.currentTimeMillis() + CORNER_TIMEOUT;
+
+                leftDrift(targetDistance);
+                corneringLeft = true;
+
+                return "left corner";
+            }
+        } else if (takeNextRight) {
+            System.out.println("IR: Taking next right...");
+            if (R == 0) {
+                targetDistance = CORNER_DISTANCE;
+                corner_finish_time = System.currentTimeMillis() + CORNER_TIMEOUT;
+                rightDrift(targetDistance);
+                corneringRight = true;
+                return "right corner";
+            }
+        }
+
+        if (L == 0 && R
+                == 0) {
             return "unknown";
         } else if (L > R) {
             if (L == 1 && ALCOVES_SUCK) { //alcove on the right, close to right wall
@@ -132,9 +208,9 @@ public class IRDaemon {
             }
         } else if (R > L) {
             isLeftPreferred = false;
-            if (R == 1 && ALCOVES_SUCK) {//alcove on the left, close to left wall
-                 rightDrift(CLOSE_DISTANCE);
-                 return "drift right";
+            if (R == 1 && ALCOVES_SUCK) {//alcove on the left, close to left wall;
+                rightDrift(CLOSE_DISTANCE);
+                return "drift right";
             } else {
                 if (L == 0) {
                     targetDistance = CLOSE_DISTANCE;
@@ -144,7 +220,8 @@ public class IRDaemon {
                 rightTurn(targetDistance);
                 return "trust right";
             }
-        } else if (L == 0 && R == 0) {
+        } else if (L == 0 && R
+                == 0) {
             return "unknown";
         } else {
             if (L >= 2 && R >= 2) {
@@ -165,7 +242,7 @@ public class IRDaemon {
     }
 
     /*---------------------*/
-    // Housekeeping 
+// Housekeeping 
     /*---------------------*/
     public void initRecents() {
         for (int i = 0; i < SAMPLE_COUNT; i++) {
@@ -306,6 +383,13 @@ public class IRDaemon {
         updateConfidence();
     }
 
+    public void updateState(boolean collide, boolean leftTurn, boolean rightTurn, int speed) {
+        isColliding = collide;
+        takeNextLeft = leftTurn;
+        takeNextRight = rightTurn;
+        setSpeed = speed;
+    }
+
     /*---------------------*/
     // Output
     /*---------------------*/
@@ -401,7 +485,7 @@ public class IRDaemon {
 
     //3rd-order polynomial approximation of volts -> centimeter conversion for analog IR readings
     // Contains magic numbers, don't go changin' them willy-nilly!
-    private static double getDistance(double volts) {
+    public static double getDistance(double volts) {
         double oldVal = 18.67 / (volts + 0.167); // Old method!
         double newVal = 16.2537 * MathUtils.pow(volts, 4)
                 - 129.893 * MathUtils.pow(volts, 3)
@@ -439,7 +523,12 @@ public class IRDaemon {
         } else if (thetaRatio < -MAX_ANGLE_FACTOR) {
             thetaRatio = -MAX_ANGLE_FACTOR;
         }
-        int turn = (int) (1500 - (TURN_MAX * thetaRatio));
+        int turn;
+        if (setSpeed <= 1500) {
+            turn = (int) (1500 - (TURN_MAX * thetaRatio));
+        } else {
+            turn = (int) (1500 + (TURN_MAX * thetaRatio));
+        }
         return turn;
     }
 
@@ -571,17 +660,17 @@ public class IRDaemon {
         storeTarget(calcIdealTheta(set_distance, avgDist));
         turnSuggest = calcTurn(avgTarget, avgTheta);
     }
-    
+
     //Turn toward right wall (since distance will be high), but do not update theta average
-    public void rightDrift(double set_distance){
+    public void rightDrift(double set_distance) {
         //Do not store theta -- don't trust the right value!
         storeDistance(distanceAvgR);
         storeTarget(calcIdealTheta(set_distance, avgDist));
         turnSuggest = calcTurn(avgTarget, avgTheta);
     }
-    
-        //Turn toward right wall (since distance will be high), but do not update theta average
-    public void leftDrift(double set_distance){
+
+    //Turn toward right wall (since distance will be high), but do not update theta average
+    public void leftDrift(double set_distance) {
         set_distance = -set_distance;
         //Do not store theta -- don't trust the right value!
         storeDistance(distanceAvgL);
