@@ -429,6 +429,11 @@ public class IRDaemon {
     //Assumes all boolean smallPoint variables are false.
     public SmallPoint getSmallPoint(int turnSetting, int speedSetting, double time) {
         SmallPoint out = new SmallPoint(readingLF, readingRF, readingLR, readingRR, turnSetting, speedSetting);
+        out.isColliding = isColliding;
+        out.takeNextLeft = takeNextLeft;
+        out.takeNextRight = takeNextRight;
+        out.corneringLeft = corneringLeft;
+        out.corneringRight = corneringRight;
         out.time = time;
         if (!out.isASmallPoint()) {
             System.out.println("Created an invalid SmallPoint!" + out.booleansToUnsignedInt());

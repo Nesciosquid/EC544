@@ -469,7 +469,6 @@ public class MainCarController extends MIDlet implements ISwitchListener {
 
                 turnHard();
             }
-
             SmallPoint sp = IR_DAEMON.getSmallPoint(setTurn, setSpeed, System.currentTimeMillis());
             transmitSmallPoint(sp, broadcastConnections[0], broadcastDatagrams[0]);
 

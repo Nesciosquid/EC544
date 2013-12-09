@@ -26,10 +26,10 @@ public class SmallPoint {
     public int setSpeed; // servo value / 10;
     //booleans to determine car state 
     public boolean isColliding = false;
-    public boolean isCornering = false;
-    public boolean isHonking = false;
-    public boolean isParking = false;
-    public boolean isLocked = false;
+    public boolean takeNextLeft = false;
+    public boolean takeNextRight = false;
+    public boolean corneringLeft = false;
+    public boolean corneringRight = false;
     public boolean bool5 = false;
     //timestamp, must be a double. :(
 
@@ -80,19 +80,19 @@ public class SmallPoint {
         }
         if (unsignedBooleans / 16 > 0) {
             unsignedBooleans -= 16;
-            isCornering = true;
+            takeNextLeft = true;
         }
         if (unsignedBooleans / 8 > 0) {
             unsignedBooleans -= 8;
-            isHonking = true;
+            takeNextRight = true;
         }
         if (unsignedBooleans / 4 > 0) {
             unsignedBooleans -= 4;
-            isParking = true;
+            corneringLeft = true;
         }
         if (unsignedBooleans / 2 > 0) {
             unsignedBooleans -= 2;
-            isLocked = true;
+            corneringRight = true;
         }
         if (unsignedBooleans / 1 > 0) {
             unsignedBooleans -= 1;
@@ -132,17 +132,17 @@ public class SmallPoint {
         if (isColliding == true) {
             out += 1;
         }
-        if (isCornering == true) {
+        if (takeNextLeft == true) {
             out += 2;
         }
 
-        if (isHonking == true) {
+        if (takeNextRight == true) {
             out += 4;
         }
-        if (isParking == true) {
+        if (corneringLeft == true) {
             out += 8;
         }
-        if (isLocked == true) {
+        if (corneringRight == true) {
             out += 16;
         }
         if (bool5 == true) {
