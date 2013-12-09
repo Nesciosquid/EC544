@@ -80,12 +80,13 @@ public class XbeeonSPOT extends MIDlet {
     //private byte[] routerAddressB = {(byte) 0x00, (byte) 0x13, (byte) 0xa2, (byte) 0x00, (byte) 0x40, (byte) 0xa1, (byte) 0xa1, (byte) 0x47};
     private byte[] routerAddressC = {(byte) 0x00, (byte) 0x13, (byte) 0xa2, (byte) 0x00, (byte) 0x40, (byte) 0xa1, (byte) 0xa1, (byte) 0x53};
     private byte[] routerAddressD = {(byte) 0x00, (byte) 0x13, (byte) 0xa2, (byte) 0x00, (byte) 0x40, (byte) 0x91, (byte) 0xBC, (byte) 0x5C};
+    private byte[] routerAddressE = {(byte) 0x00, (byte) 0x13, (byte) 0xa2, (byte) 0x00, (byte) 0x40, (byte) 0x8D, (byte) 0x4B, (byte) 0x4C};
     //private Beacon[] beacons = {new Beacon("A", routerAddressA), new Beacon("C", routerAddressC), new Beacon("D", routerAddressD)};
-    private Beacon[] beacons = {new Beacon("A", routerAddressA), new Beacon("C", routerAddressC)};
+    private Beacon[] beacons = {new Beacon("A", routerAddressA), new Beacon("C", routerAddressC), new Beacon("E", routerAddressE)};
     private ITriColorLEDArray leds = (ITriColorLEDArray) Resources.lookup(ITriColorLEDArray.class);
     
     private EDemoBoard eDemo = EDemoBoard.getInstance();
-    private IOutputPin resetPin = eDemo.getOutputPins()[eDemo.H0];
+    private IOutputPin resetPin = eDemo.getOutputPins()[eDemo.H3];
     private ILightSensor light = (ILightSensor) Resources.lookup(ILightSensor.class);
     byte[] buffer = new byte[50];
     byte[] clearBuffer = new byte[50];
