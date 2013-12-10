@@ -10,7 +10,7 @@ package EC544.main;
  */
 public class CarPoint {
 
-    public float time;
+    public double time;
     public float RF;
     public float LF;
     public float RR;

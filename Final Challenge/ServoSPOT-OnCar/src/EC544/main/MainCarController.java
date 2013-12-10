@@ -31,6 +31,7 @@ import com.sun.spot.peripheral.radio.RadioFactory;
 import com.sun.spot.resources.Resources;
 import com.sun.spot.resources.transducers.IAnalogInput;
 import com.sun.spot.resources.transducers.ISwitch;
+import com.sun.spot.resources.transducers.IIOPin;
 import com.sun.spot.resources.transducers.ISwitchListener;
 import com.sun.spot.resources.transducers.ITemperatureInput;
 import com.sun.spot.resources.transducers.ITriColorLED;
@@ -77,15 +78,17 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     private static final int SERVO_MAX_VALUE = 2000;
     private static final int SERVO_MIN_VALUE = 1000;
     private static final int SAMPLE_TIME = 50;
+    private static final int BLINK_TIME = 500;
     private static final int TURN_LOW_STEP = 20; //steering step low
     private static final int SPEED_HIGH_STEP = 50; //speeding step high
     private static final int SPEED_LOW_STEP = 30; //speeding step low
-    private static final int HOST_PORT = 42;
-    private static final int RECEIVE_PORT = 41;
+    private static final int HOST_PORT = 99;
+    private static final int RECEIVE_PORT = 98;
     private static double MAX_TRACKING_ANGLE = 30.0;
     private static double CONFIDENCE_HIGH_CUTOFF = 1.00;
     private static double CONFIDENCE_CUTOFF_STEP = .25;
     private static boolean REVERSE_LEDS = false;
+    public boolean forceDaemon = false;
     private static BufferedWriter writeOut;
     // Devices
     private EDemoBoard eDemo = EDemoBoard.getInstance();
@@ -99,6 +102,10 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     private ISwitch sw2 = eDemo.getSwitches()[EDemoBoard.SW2];
     private ITriColorLED[] leds = eDemo.getLEDs();
     private ITriColorLEDArray myLEDs = (ITriColorLEDArray) Resources.lookup(ITriColorLEDArray.class);
+    private IIOPin headLightL = eDemo.getIOPins()[EDemoBoard.D0];
+    private IIOPin headLightR = eDemo.getIOPins()[EDemoBoard.D1];
+    private IIOPin rearLightL = eDemo.getIOPins()[EDemoBoard.D2];
+    private IIOPin rearLightR = eDemo.getIOPins()[EDemoBoard.D3];
     // 1st servo for left & right direction 
     private Servo turnServo = new Servo(eDemo.getOutputPins()[EDemoBoard.H1]);
     // 2nd servo for forward & backward direction
@@ -106,7 +113,8 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     //private int servo1ForwardValue;
     //private int servo2ForwardValue;
     private boolean recvDo = true;
-    private boolean lockTurn;
+    private boolean lightsDo = true;
+    private boolean lockTurn = true;
     private boolean lockSpeed = true;
     private boolean isColliding = false;
     private boolean takeNextRight = false;
@@ -115,7 +123,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     private static int setSpeed = 1500;
     private static double setDistance = 75.0; // cm
     private static int setTurn = 1500;
-    private static int slowSpeed = 1400;
+    private static int slowSpeed = 1350;
     private final int SAMPLE_COUNT = 1; //used to average reads or skip broadcasting
     private final int BROADCAST_SKIP = 4;
     private double[] ultra_samples = new double[SAMPLE_COUNT];
@@ -171,6 +179,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
                 setSpeed = 1500;
             }
             System.out.println("Speed set to" + setSpeed);
+            drive();
         } else if (command.equals("turn")) {
             if (value == 0) {
                 lockTurn = false;
@@ -180,6 +189,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
                 turnHard();
                 lockTurn = true;
             }
+            turnHard();
             System.out.println("Turn set to" + setTurn);
         } else if (command.equals("takeNextRight")) {
             takeNextRight = true;
@@ -192,7 +202,47 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         } else if (command.equals("setDistance")) {
             setDistance = value;
         }
+        forceDaemon = true;
+    }
 
+    private void lightLoop() {
+        boolean lightStrobe = true;
+        headLightL.setAsOutput(true);
+        headLightR.setAsOutput(true);
+        rearLightL.setAsOutput(true);
+        rearLightR.setAsOutput(true);
+        while (lightsDo) {
+            if (takeNextLeft) {
+                if (lightStrobe) {
+                    rearLightL.setHigh();
+                    headLightL.setHigh();
+                    lightStrobe = false;
+                } else {
+                    rearLightL.setLow();
+                    headLightL.setLow();
+                    lightStrobe = true;
+                }
+            } else if (takeNextRight) {
+                if (lightStrobe) {
+                    rearLightR.setHigh();
+                    headLightR.setHigh();
+                    lightStrobe = false;
+                } else {
+                    rearLightR.setLow();
+                    headLightR.setLow();
+                    lightStrobe = true;
+                }
+            } else if (setSpeed > 1500) {
+                rearLightR.setHigh();
+                rearLightL.setHigh();
+            } else {
+                rearLightR.setLow();
+                rearLightL.setLow();
+                headLightR.setHigh();
+                headLightL.setHigh();
+            }
+            Utils.sleep(BLINK_TIME);
+        }
     }
 
     private void receiveLoop() {
@@ -266,7 +316,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         try {
             dg.reset();
             dg.writeUTF("CarPoint");
-            dg.writeFloat(cp.time);
+            dg.writeDouble(cp.time);
             dg.writeFloat(cp.LF);
             dg.writeFloat(cp.RF);
             dg.writeFloat(cp.LR);
@@ -363,13 +413,14 @@ public class MainCarController extends MIDlet implements ISwitchListener {
             double RR_avg = calcAverage(RR_samples);
             IR_DAEMON.updateReads(LF_avg, RF_avg, LR_avg, RR_avg);
             LED_DAEMON.changeColors(IR_DAEMON.thetaRight, IR_DAEMON.thetaLeft, IR_DAEMON.confidenceRF, IR_DAEMON.confidenceLF, IR_DAEMON.confidenceRR, IR_DAEMON.confidenceLR);
-            if (ultra_avg <= 80) {
-                if (!isColliding) {
-                    
-                    isColliding = true;
-                    alertSound();
+
+            if (ultra_avg <= 70 && !isColliding) {
+                isColliding = true;
+                alertSound();
+            } else if (ultra_avg >= 80) {
+                isColliding = false;
             }
-            }
+
 
         } catch (IOException ex) {
             System.out.println("IOException in sampleSensors()! " + ex);
@@ -387,16 +438,18 @@ public class MainCarController extends MIDlet implements ISwitchListener {
     }
 
     private void takeSuggestions() {
-        if (!lockTurn) {
+        if (!forceDaemon) {
+            if (!lockTurn) {
 
-            setTurn = IR_DAEMON.turnSuggest;
+                setTurn = IR_DAEMON.turnSuggest;
+            }
+            if (!lockSpeed) {
+                setSpeed = IR_DAEMON.speedSuggest;
+            }
+            isColliding = IR_DAEMON.isColliding;
+            takeNextRight = IR_DAEMON.takeNextRight;
+            takeNextLeft = IR_DAEMON.takeNextLeft;
         }
-        if (!lockSpeed) {
-            setSpeed = IR_DAEMON.speedSuggest;
-        }
-        isColliding = IR_DAEMON.isColliding;
-        takeNextLeft = IR_DAEMON.takeNextLeft;
-        takeNextRight = IR_DAEMON.takeNextRight;
     }
 
     private void oldSampleLoop() {
@@ -421,9 +474,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
 
             //Used for transmitting to different ports, and skipping transmission of datapoints
             if (skipCounter == skipCount) {
-                //CarPoint cp = IR_DAEMON.getCarpoint(setTurn, setSpeed, startTurn, stopTurn);
                 SmallPoint sp = IR_DAEMON.getSmallPoint(setTurn, setSpeed, System.currentTimeMillis());
-                //transmitCarPoint(cp, broadcastConnections[broadcastCounter], broadcastDatagrams[broadcastCounter]);
                 transmitSmallPoint(sp, broadcastConnections[broadcastCounter], broadcastDatagrams[broadcastCounter]);
                 if (broadcastCounter < BROADCAST_PORT_COUNT - 1) {
                     broadcastCounter++;
@@ -447,12 +498,13 @@ public class MainCarController extends MIDlet implements ISwitchListener {
             for (int i = 0; i < BROADCAST_SKIP; i++) {
                 sampleSensors(); // takes IR readings and updates IR_DAEMON\
                 IR_DAEMON.updateState(isColliding, takeNextLeft, takeNextRight, setSpeed);
+                forceDaemon = false;
                 String command = IR_DAEMON.pickDirection(); // You MUST call pickDirection() or IR_DAEMON will give you the wrong response for turnSuggest!
                 takeSuggestions();
-                if (takeNextLeft){
+                if (takeNextLeft) {
                     System.out.println("Taking next left!");
                 }
-                if (takeNextRight){
+                if (takeNextRight) {
                     System.out.println("Taking next right!");
                 }
 
@@ -496,6 +548,7 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         Utils.sleep(500);
         LED_DAEMON.setAllOff();
 
+
         new Thread() {
             public void run() {
                 sampleLoop();
@@ -506,6 +559,12 @@ public class MainCarController extends MIDlet implements ISwitchListener {
         new Thread() {
             public void run() {
                 receiveLoop();
+            }
+        }.start();
+
+        new Thread() {
+            public void run() {
+                lightLoop();
             }
         }.start();
 

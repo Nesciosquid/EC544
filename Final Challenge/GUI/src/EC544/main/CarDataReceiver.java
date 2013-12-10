@@ -46,8 +46,8 @@ import java.io.*;
 public class CarDataReceiver {
 
     // Configuration variables for destination port, sampling interval
-    private static final int HOST_PORT = 42;
-    private static final int SEND_PORT = 41;
+    private static final int HOST_PORT = 99;
+    private static final int SEND_PORT = 98;
     private static final int SEND_INTERVAL = 60 * 1000;
     private static final String OUTPUT_FILE = "live.csv";
     private static final String INPUT_LOG = "log_input.csv";
@@ -120,10 +120,9 @@ public class CarDataReceiver {
     }
 
     private void readLoop() {
-        try{
-        commandConn = (RadiogramConnection) Connector.open("radiogram://broadcast:" + (SEND_PORT));
-        }
-        catch (IOException ex){
+        try {
+            commandConn = (RadiogramConnection) Connector.open("radiogram://broadcast:" + (SEND_PORT));
+        } catch (IOException ex) {
             System.out.println("IOException in setting up commandConn!");
         }
         while (true) {
@@ -135,17 +134,22 @@ public class CarDataReceiver {
                     commandData.reset();
                     currentLine = commander.readLine();
                     String[] commands = currentLine.split(",");
-                    if (commands.length > 0){
-                    if (!commands[0].equals("command")) {
-                        commandData.writeUTF("command");
-                        System.out.println("Sending command: " + commands[0] + "," + commands[1]);
-                        for (int i = 0; i < commands.length; i++) {
-                            System.out.println("Writing "+i+": " + commands[i]);
-                            commandData.writeUTF(commands[i]);
+                    if (commands.length > 0) {
+                        if (!commands[0].equals("command")) {
+                            commandData.writeUTF("command");
+                            System.out.println("Sending command: " + commands[0] + "," + commands[1]);
+                            for (int i = 0; i < commands.length; i++) {
+                                System.out.println("Writing " + i + ": " + commands[i]);
+                                commandData.writeUTF(commands[i]);
+                            }
+                            commandConn.send(commandData);
+                            try {
+                                Thread.sleep(200);
+                            } catch (InterruptedException ex) {
+                                ex.printStackTrace();
+                            }
                         }
-                        commandConn.send(commandData);
                     }
-                }
                 }
             } catch (Exception ex) {
                 System.out.println("Exception" + ex + " in readLoop()");
@@ -166,11 +170,11 @@ public class CarDataReceiver {
             sp = new SmallPoint(LF, RF, LR, RR, setTurn * 10, setSpeed * 10);
             sp.time = time;
             /*System.out.println("Booleans in toSmallPoint: " + booleans);
-            System.out.println("setTurn in toSmallPoint: " + setTurn + ", setTurn * 10: " + setTurn * 10);
-            System.out.println("If it was signed, setTurn would be: " + SmallPoint.toUnsignedInt(setTurn));
-            System.out.println("If it was unsigned, setTurn would be: " + SmallPoint.convertUnsignedInt(setTurn));
-            System.out.println("setSpeed in toSmallPoint: " + setSpeed + ", setSpeed * 10: " + setSpeed * 10);
-            */
+             System.out.println("setTurn in toSmallPoint: " + setTurn + ", setTurn * 10: " + setTurn * 10);
+             System.out.println("If it was signed, setTurn would be: " + SmallPoint.toUnsignedInt(setTurn));
+             System.out.println("If it was unsigned, setTurn would be: " + SmallPoint.convertUnsignedInt(setTurn));
+             System.out.println("setSpeed in toSmallPoint: " + setSpeed + ", setSpeed * 10: " + setSpeed * 10);
+             */
             sp.setBooleans(booleans);
         } catch (IOException ex) {
             System.out.println("IOexception " + ex + " in toSmallPoint!");
@@ -239,8 +243,8 @@ public class CarDataReceiver {
             System.err.println("setUp caught " + e.getMessage());
             throw e;
         }
-        
-                new Thread() {
+
+        new Thread() {
             public void run() {
                 readLoop();
             }

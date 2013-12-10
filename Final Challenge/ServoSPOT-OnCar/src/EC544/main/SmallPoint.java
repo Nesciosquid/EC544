@@ -65,38 +65,52 @@ public class SmallPoint {
         }
     }
 
-    public void setBooleans(int unsignedBooleans) {
-        if (unsignedBooleans / 128 > 0) {
-            unsignedBooleans -= 128;
-            //No boolean, used to identify SmallPoints
-        }
-        if (unsignedBooleans / 64 > 0) {
-            unsignedBooleans -= 64;
-            //No boolean, used to identify SmallPoints
-        }
+    public void setBooleans(int bools) {
+      int unsignedBooleans = bools - 128;
         if (unsignedBooleans / 32 > 0) {
             unsignedBooleans -= 32;
-            isColliding = true;
+            isColliding = false;
         }
+        else {
+          isColliding = true;
+        }
+        
         if (unsignedBooleans / 16 > 0) {
             unsignedBooleans -= 16;
-            takeNextLeft = true;
+           takeNextLeft = false;
+        }
+        else{
+          takeNextLeft = true;
         }
         if (unsignedBooleans / 8 > 0) {
             unsignedBooleans -= 8;
-            takeNextRight = true;
+            takeNextRight = false;
         }
+        else {
+          takeNextRight = true;
+        }
+        
         if (unsignedBooleans / 4 > 0) {
             unsignedBooleans -= 4;
-            corneringLeft = true;
+            corneringLeft = false;
         }
+        else{
+          corneringLeft = true;
+        }
+        
         if (unsignedBooleans / 2 > 0) {
             unsignedBooleans -= 2;
-            corneringRight = true;
+            corneringRight = false;
+        }
+        else{
+          corneringRight = true;
         }
         if (unsignedBooleans / 1 > 0) {
-            unsignedBooleans -= 1;
-            bool5 = true;
+            unsignedBooleans -= 1;            
+            bool5 = false;
+        }
+        else {
+          bool5 = true;
         }
     }
     

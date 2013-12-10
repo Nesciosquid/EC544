@@ -16,7 +16,8 @@ public class IRDaemon {
     // Control booleans
     /*---------------------*/
     final boolean DYNAMIC_HALLWAY_SIZE = false;
-    final boolean ALCOVES_SUCK = true;
+    final boolean ALCOVES_SUCK = false; // changed from true for 4th floor
+    final boolean DUCK_ALCOVES = false;
     final boolean ALCOVES_SUCK_ALTERNATE = false;
     public boolean isColliding = false;
     public boolean takeNextLeft = false;
@@ -24,23 +25,28 @@ public class IRDaemon {
     public int setSpeed;
     boolean corneringLeft = false;
     boolean corneringRight = false;
-    final double CORNER_TIMEOUT = 3000;
+    final double FORWARD_TIMEOUT = 1000;
+    final double CORNER_TIMEOUT = 6500; // 3000
+    final double REVERSE_TIMEOUT = 3000;
+    double reverse_finish_time = 0;
     double corner_finish_time = 0;
+    double forward_finish_time = 0;
     /*---------------------*/
     // Environmental coefficients
     /*---------------------*/
-    final double NEAR_WALL_DISTANCE = 43.0; //15.0 in IR
-    final double DEFAULT_HALL_SIZE = 181.0; // 42.0 in IR
-    final double IDEAL_DISTANCE = 75.0; // 20.0 in IR
-    final double CLOSE_DISTANCE = 75.0; // 20.0 in IR, 17.0 works great
+    final double NEAR_WALL_DISTANCE = 43.0; // 
+    final double DEFAULT_HALL_SIZE = 181.0; //
+    final double IDEAL_DISTANCE = 75.0; //
+    final double CLOSE_DISTANCE = 50.0; // 
+    final double ALCOVE_DISTANCE = 110.0;
     /*---------------------*/
     // Car-specific coefficients 
     /*---------------------*/
     final int TURN_RIGHT_MAX = 1000; // 1000
     final int TURN_LEFT_MAX = 2000; // 2000
     final int TURN_MAX = 500; // 500
-    final double SENSOR_DISTANCE = 31.0;// cm, 10.0 in IR in IR units
-    final double CORNER_DISTANCE = -40.0;
+    final double SENSOR_DISTANCE = 31.0;// 31.0
+    final double CORNER_DISTANCE = -100.0;
     final double MAX_TURN_DISTANCE = 90.0;
     final double MAX_TURN_ANGLE = 25.0;
     final double APPROACH_ANGLE = 25.0;
@@ -49,7 +55,7 @@ public class IRDaemon {
     final double MAX_ANGLE_FACTOR = 1.0;
     final double MAX_HALL_CONFIDENCE = 1.25; // if new hall distance is > 1.25 of average, beware!
     final double MAX_CONFIDENCE_ANGLE = 35;
-    final double MAX_THETA_CHANGE = degToRadians(5); //3
+    final double MAX_THETA_CHANGE = degToRadians(7); //5
     /*---------------------*/
     // Confidence calculation coefficients
     /*---------------------*/
@@ -57,9 +63,6 @@ public class IRDaemon {
     final double CONF_3 = 1.0;
     final double CONF_2 = 1.5;
     final double CONF_1 = 2.0;
-    final double CONFIDENCE_HIGH_CUTOFF = 1.00; // 1.00 in IR units
-    final double CONFIDENCE_STEP = 0.30; // .30 in IR units
-    final double CONFIDENCE_THRESHOLD = .03; // .03 in IR units
     final int SAMPLE_COUNT = 3; // was 3 for last functional test
     /*---------------------*/
     // Control coefficients
@@ -119,13 +122,20 @@ public class IRDaemon {
     // Pathing decisions
     /*---------------------*/
     public String pickDirection() {
-
-        if (isColliding) {
-            isColliding = false;
-            speedSuggest = 1750;
-            System.out.println("Colliding, going backwards!");
-        } else {
+        if (forward_finish_time >= System.currentTimeMillis() && !isColliding) {
             speedSuggest = 1300;
+        } else if (reverse_finish_time >= System.currentTimeMillis()) {
+            speedSuggest = 1700;
+        } else {
+            if (isColliding) {
+                isColliding = false;
+                reverse_finish_time = System.currentTimeMillis() + REVERSE_TIMEOUT / 2;
+                speedSuggest = 1700;
+                System.out.println("Colliding, going backwards!");
+            } else {
+                speedSuggest = 1300;
+
+            }
         }
 
         int L = leftTrust();
@@ -133,73 +143,100 @@ public class IRDaemon {
 
         if (corneringLeft) {
             System.out.println("Cornering left!");
-            if (L >= 2 && System.currentTimeMillis() >= corner_finish_time) {
+            if (System.currentTimeMillis() >= corner_finish_time) {
                 targetDistance = IDEAL_DISTANCE;
                 takeNextLeft = false;
                 corner_finish_time = 0;
                 corneringLeft = false;
-                leftDrift(targetDistance);
+                leftTurn(targetDistance);
                 System.out.println("Finished left corner!");
                 return "left corner finish";
             } else {
+                if (L == 1) {
+                    targetDistance = CLOSE_DISTANCE;
+                    leftTurn(targetDistance);
+                }
                 targetDistance = CORNER_DISTANCE;
-                leftTurn(targetDistance);
+                leftCorner();
                 return "cornering left";
             }
 
 
         } else if (corneringRight) {
             System.out.println("Cornering right!");
-            if (R >= 2 && System.currentTimeMillis() >= corner_finish_time) {
+            if (System.currentTimeMillis() >= corner_finish_time) {
                 targetDistance = IDEAL_DISTANCE;
                 takeNextRight = false;
                 corner_finish_time = 0;
                 corneringRight = false;
-                System.out.println("Finished left corner!");
-
-                rightDrift(targetDistance);
+                System.out.println("Finished right corner!");
+                rightTurn(targetDistance);
                 return "right corner finish";
             } else {
                 targetDistance = CORNER_DISTANCE;
-                rightTurn(targetDistance);
+                rightCorner();
                 return "cornering right";
             }
 
-        }
-
-        if (takeNextLeft) {
+        } else if (takeNextLeft) {
             System.out.println("IR: Taking next left...");
+            isLeftPreferred = true;
             if (L == 0) {
                 targetDistance = CORNER_DISTANCE;
                 corner_finish_time = System.currentTimeMillis() + CORNER_TIMEOUT;
-
-                leftDrift(targetDistance);
+                reverse_finish_time = System.currentTimeMillis() + REVERSE_TIMEOUT;
+                forward_finish_time = System.currentTimeMillis() + FORWARD_TIMEOUT;
+                leftCorner();
                 corneringLeft = true;
-
                 return "left corner";
+            } else {
+                targetDistance = CLOSE_DISTANCE;
+                if (L == 1) {
+                    leftDrift(targetDistance);
+                    return "drift left";
+                } else {
+                    leftTurn(targetDistance);
+                    return "turn left";
+                }
             }
         } else if (takeNextRight) {
+            isLeftPreferred = false;
             System.out.println("IR: Taking next right...");
             if (R == 0) {
                 targetDistance = CORNER_DISTANCE;
+                reverse_finish_time = System.currentTimeMillis() + REVERSE_TIMEOUT;
                 corner_finish_time = System.currentTimeMillis() + CORNER_TIMEOUT;
-                rightDrift(targetDistance);
+                forward_finish_time = System.currentTimeMillis() + FORWARD_TIMEOUT;
+                rightCorner();
                 corneringRight = true;
                 return "right corner";
+            } else {
+                targetDistance = CLOSE_DISTANCE;
+                if (R == 1) {
+                    rightDrift(targetDistance);
+                    return "drift right";
+                } else {
+                    rightTurn(targetDistance);
+                    return "turn right";
+                }
             }
-        }
-
-        if (L == 0 && R
-                == 0) {
+        } else if (L == 0 && R == 0) {
             return "unknown";
         } else if (L > R) {
             if (L == 1 && ALCOVES_SUCK) { //alcove on the right, close to right wall
-                leftDrift(CLOSE_DISTANCE);
+                if (DUCK_ALCOVES){
+                targetDistance = CLOSE_DISTANCE;
+                }
+                else {
+                    targetDistance = ALCOVE_DISTANCE;
+                }
+                leftDrift(targetDistance);
                 return "drift left";
             } else {
                 isLeftPreferred = true;
-                if (R == 0) {
+                if (R == 0 && DUCK_ALCOVES) {
                     targetDistance = CLOSE_DISTANCE;
+
                 } else {
                     targetDistance = IDEAL_DISTANCE;
                 }
@@ -207,12 +244,18 @@ public class IRDaemon {
                 return "trust left";
             }
         } else if (R > L) {
-            isLeftPreferred = false;
+            //isLeftPreferred = false; // Changed for demo on 4th floor
             if (R == 1 && ALCOVES_SUCK) {//alcove on the left, close to left wall;
-                rightDrift(CLOSE_DISTANCE);
+                if (DUCK_ALCOVES){
+                    targetDistance = CLOSE_DISTANCE;
+                }
+                else{
+                    targetDistance = ALCOVE_DISTANCE;
+                }
+                rightDrift(targetDistance);
                 return "drift right";
             } else {
-                if (L == 0) {
+                if (L == 0 && DUCK_ALCOVES) {
                     targetDistance = CLOSE_DISTANCE;
                 } else {
                     targetDistance = IDEAL_DISTANCE;
@@ -295,10 +338,10 @@ public class IRDaemon {
 
         if (new_theta >= maxTheta) {
             new_theta = maxTheta;
-            System.out.println("New theta too big!");
+            //System.out.println("New theta too big!");
         } else if (new_theta <= minTheta) {
             new_theta = minTheta;
-            System.out.println("New theta too small!");
+            //System.out.println("New theta too small!");
 
         }
 
@@ -393,9 +436,9 @@ public class IRDaemon {
     /*---------------------*/
     // Output
     /*---------------------*/
-    public CarPoint getCarpoint(int turn, int setSpeed, boolean startTurn, boolean stopTurn) {
+    public CarPoint getCarpoint(int turn, int setSpeed, boolean startTurn, boolean stopTurn, double time) {
         CarPoint cp = new CarPoint();
-        cp.time = System.currentTimeMillis();
+        cp.time = time;
         cp.LF = (float) readingLF;
         cp.RF = (float) readingRF;
         cp.LR = (float) readingLR;
@@ -681,6 +724,27 @@ public class IRDaemon {
         storeDistance(distanceAvgL);
         storeTarget(calcIdealTheta(set_distance, avgDist));
         turnSuggest = calcTurn(avgTarget, avgTheta);
+
+    }
+
+    public void leftCorner() {
+        storeDistance(distanceAvgL);
+        if (setSpeed > 1500) {
+            turnSuggest = (int) (TURN_RIGHT_MAX);
+        } else {
+            turnSuggest = (int) (TURN_LEFT_MAX);
+        }
+
+    }
+
+    public void rightCorner() {
+        storeDistance(distanceAvgR);
+        if (setSpeed > 1500) {
+            turnSuggest = (int) (TURN_LEFT_MAX);
+        } else {
+            turnSuggest = (int) (TURN_RIGHT_MAX);
+        }
+
     }
 
     public void rightTurn(double set_distance) {
@@ -746,15 +810,6 @@ public class IRDaemon {
             return false;
         } else {
             return true;
-        }
-    }
-
-    public boolean isCloseEnough(double confidence1, double confidence2) {
-        double diff = Math.abs(confidence1 - confidence2);
-        if (diff < CONFIDENCE_THRESHOLD) {
-            return true;
-        } else {
-            return false;
         }
     }
 

@@ -141,11 +141,11 @@ public class LEDaemon {
     public void changeColors(double thetaRight, double thetaLeft, double confidenceRF, double confidenceLF, double confidenceRR, double confidenceLR) {
         leftLED = calculateIndex(thetaLeft, reverse_LEDs);
         rightLED = calculateIndex(thetaRight, reverse_LEDs);
-        leftRED = calcColor(confidenceLF, confidenceLR, 1);
-        leftGREEN = calcColor(confidenceLF, confidenceLR, 0);
+        leftRED = calcColor(confidenceLF, 1/confidenceLR, 1);
+        leftGREEN = calcColor(confidenceLF, 1/confidenceLR, 0);
         leftBLUE = 0;
-        rightBLUE = calcColor(confidenceRF, confidenceRR, 1);
-        rightGREEN = calcColor(confidenceRF, confidenceRR, 0);
+        rightBLUE = calcColor(confidenceRF, 1/confidenceRR, 1);
+        rightGREEN = calcColor(confidenceRF, 1/confidenceRR, 0);
         rightRED = 0;
 
         updateLEDs();
